@@ -9,11 +9,14 @@ def save_frame_worker(frame_data):
     frame, output_path, target_width, target_height = frame_data
     # Resize frame to target resolution
     resized_frame = cv2.resize(frame, (target_width, target_height), interpolation=cv2.INTER_AREA)
-    # Save as JPEG with high quality for faster saving
-    cv2.imwrite(output_path, resized_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    # Save as JPEG with optimized settings for maximum speed
+    cv2.imwrite(output_path, resized_frame, [
+        cv2.IMWRITE_JPEG_QUALITY, 85,
+        cv2.IMWRITE_JPEG_OPTIMIZE, 1
+    ])
     return output_path
 
-def extract_frames(video_path, output_folder, interval_seconds=5, target_resolution=(640, 480), max_workers=10):
+def extract_frames(video_path, output_folder, interval_seconds=5, target_resolution=(854, 480), max_workers=10):
     """
     Extracts frames from a video at a specified interval with optimized performance.
 
@@ -46,6 +49,10 @@ def extract_frames(video_path, output_folder, interval_seconds=5, target_resolut
 
     # Optimize video capture settings for speed
     video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer size for faster reading
+    video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Start from beginning
+    
+    # Skip frames in video reading instead of reading every frame
+    total_frames = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Get the frames per second (fps) of the video
     fps = video_capture.get(cv2.CAP_PROP_FPS)
@@ -130,5 +137,5 @@ if __name__ == '__main__':
     # 3. Set the interval in seconds (e.g., 5 for one frame every 5 seconds)
     capture_interval = 5
 
-    # Run the function
-    extract_frames(input_video, output_dir, capture_interval)
+    # Run the function - 854x480 is proper 16:9 aspect ratio
+    extract_frames(input_video, output_dir, capture_interval, target_resolution=(480,854), max_workers=32)
