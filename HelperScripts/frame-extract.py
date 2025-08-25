@@ -131,16 +131,22 @@ def extract_frames(video_path, output_folder, interval_seconds=5, target_resolut
 
 # --- HOW TO USE ---
 if __name__ == '__main__':
-    # 1. Set the path to your Clash Royale video file
-    #    Example for Windows: "C:\\Users\\YourUser\\Videos\\clash_royale.mp4"
-    #    Example for Mac/Linux: "/home/user/videos/clash_royale.mp4"
-    input_video = "vids/2025-08-25-pc.mkv" 
+
+    input_video = input("Enter the path to your video file: ")
 
     # 2. Set the folder where you want to save the images
     output_dir = "dataset"
 
     # 3. Set the interval in seconds (e.g., 5 for one frame every 5 seconds)
-    capture_interval = 5
+    capture_interval = int(input("Enter the frame capture interval in seconds (e.g., 5): "))
+    if capture_interval <= 0 or capture_interval > 3600:
+        print("Invalid interval. Using default of 5 seconds.")
+        capture_interval = 5
 
     # Run the function - 854x480 is proper 16:9 aspect ratio
-    extract_frames(input_video, output_dir, capture_interval, target_resolution=(480,854), max_workers=32)
+    try:
+        extract_frames(input_video, output_dir, capture_interval, target_resolution=(480,854), max_workers=32)
+    except KeyboardInterrupt:
+        print("Extraction interrupted by user.")
+    finally:
+        print("Cleanup resources if needed.")
