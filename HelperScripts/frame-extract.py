@@ -16,7 +16,7 @@ def save_frame_worker(frame_data):
     ])
     return output_path
 
-def extract_frames(video_path, output_folder, interval_seconds=5, target_resolution=(854, 480), max_workers=10):
+def extract_frames(video_path, output_folder, interval_seconds=5, target_resolution=(720,1280), max_workers=10):
     """
     Extracts frames from a video at a specified interval with optimized performance.
 
@@ -69,38 +69,43 @@ def extract_frames(video_path, output_folder, interval_seconds=5, target_resolut
     saved_frame_count = 0
     target_width, target_height = target_resolution
 
+    # Calculate target frame numbers for seeking
+    target_frames = list(range(0, total_frames, frames_to_skip))
+    print(f"Will extract {len(target_frames)} frames from {total_frames} total frames")
+
     # Thread pool for parallel frame saving
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
+        counter=0
 
-        # --- 3. Frame Extraction Loop ---
+        # --- 3. Frame Extraction Loop with Seeking ---
         
-        while True:
-            # Read the next frame from the video
+        for target_frame in target_frames:
+            # Seek directly to the target frame
+            video_capture.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+            
+            # Read the frame at this position
             success, frame = video_capture.read()
 
-            # If 'success' is False, we have reached the end of the video
+            # If 'success' is False, we've reached the end or there's an error
             if not success:
+                print(f"Could not read frame {target_frame}, stopping extraction")
                 break
 
-            # Check if the current frame is the one we want to save
-            if frame_count % frames_to_skip == 0:
-                # Construct the output filename
-                # e.g., "frame_0.jpg", "frame_5.jpg", etc.
-                seconds = math.floor(frame_count / fps)
-                filename = f"{os.path.basename(video_path).split('.')[0]}_{frame_count}.jpg"
-                output_path = os.path.join(output_folder, filename)
+            # Construct the output filename
+            seconds = math.floor(target_frame / fps)
+            filename = f"{os.path.basename(video_path).split('.')[0]}_{counter}.jpg"
+            counter+=1
+            output_path = os.path.join(output_folder, filename)
 
-                # Submit frame for parallel processing
-                frame_data = (frame.copy(), output_path, target_width, target_height)
-                future = executor.submit(save_frame_worker, frame_data)
-                futures.append(future)
-                
-                saved_frame_count += 1
-                if saved_frame_count % 10 == 0:  # Print progress every 10 frames
-                    print(f"Queued {saved_frame_count} frames for processing...")
-
-            frame_count += 1
+            # Submit frame for parallel processing
+            frame_data = (frame.copy(), output_path, target_width, target_height)
+            future = executor.submit(save_frame_worker, frame_data)
+            futures.append(future)
+            
+            saved_frame_count += 1
+            if saved_frame_count % 10 == 0:  # Print progress every 10 frames
+                print(f"Queued {saved_frame_count} frames for processing...")
 
         # Wait for all frames to be saved
         print("Waiting for all frames to be saved...")
