@@ -1,21 +1,36 @@
 from windows_capture import WindowsCapture, Frame, InternalCaptureControl
 import cv2 as cv
 import numpy as np
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+
+# --- Configuration ---
 # Crop settings - adjust these values manually
-CROP_LEFT = 657  # pixels to crop from left
-CROP_RIGHT = 657  # pixels to crop from right
-TARGET_WIDTH = 480
-TARGET_HEIGHT = 854
+CROP_LEFT = int(os.getenv("CROP_LEFT", 657))
+CROP_RIGHT = int(os.getenv("CROP_RIGHT", 657))
+TARGET_WIDTH = int(os.getenv("TARGET_WIDTH", 480))
+TARGET_HEIGHT = int(os.getenv("TARGET_HEIGHT", 854))
+WINDOW_NAME = os.getenv("WINDOW_NAME")
 
-# Every Error From on_closed and on_frame_arrived Will End Up Here
+# --- Validation ---
+if not WINDOW_NAME:
+    print("Error: WINDOW_NAME is not set in the .env file.")
+    exit()
 
-capture = WindowsCapture(
-    cursor_capture=None,
-    draw_border=None,
-    monitor_index=None,
-    window_name="BlueStacks App Player 1",
-)
+# --- Capture Initialization ---
+try:
+    capture = WindowsCapture(
+        cursor_capture=None,
+        draw_border=None,
+        monitor_index=None,
+        window_name=WINDOW_NAME,
+    )
+except Exception as e:
+    print(f"Error initializing window capture: {e}")
+    print(f"Please ensure a window with the name '{WINDOW_NAME}' is open.")
+    exit()
 
 
 @capture.event

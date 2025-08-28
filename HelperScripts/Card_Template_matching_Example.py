@@ -1,11 +1,42 @@
 import cv2 as cv
 import numpy as np
 import time
+import os
+from dotenv import load_dotenv
 
-#game_image=cv.imread("test/images/2025-08-25-mob_11.jpg",cv.IMREAD_UNCHANGED)
-game_image=cv.imread("test/images/deck.png",cv.IMREAD_REDUCED_GRAYSCALE_2)
-knight=cv.imread("test/images/image.png", cv.IMREAD_REDUCED_GRAYSCALE_2)
-start=time.time()
+load_dotenv()
+
+# Get environment variables
+card_image_path = os.getenv("CARD_IMAGE_PATH")
+game_state_image_path = os.getenv("GAME_STATE_IMAGE_PATH")
+
+# Validate environment variables
+if not card_image_path or not game_state_image_path:
+    print("Error: Please set CARD_IMAGE_PATH and GAME_STATE_IMAGE_PATH in your .env file.")
+    exit()
+
+# Check if files exist
+if not os.path.exists(card_image_path):
+    print(f"Error: Card image not found at '{card_image_path}'")
+    exit()
+if not os.path.exists(game_state_image_path):
+    print(f"Error: Game state image not found at '{game_state_image_path}'")
+    exit()
+
+
+# Load images using paths from .env
+game_image = cv.imread(game_state_image_path, cv.IMREAD_REDUCED_GRAYSCALE_2)
+knight = cv.imread(card_image_path, cv.IMREAD_REDUCED_GRAYSCALE_2)
+
+# Check if images loaded correctly
+if game_image is None:
+    print(f"Error: Could not load game state image from '{game_state_image_path}'")
+    exit()
+if knight is None:
+    print(f"Error: Could not load card image from '{card_image_path}'")
+    exit()
+
+start = time.time()
 result= cv.matchTemplate(game_image, knight, cv.TM_CCOEFF_NORMED)
 end=time.time()
 duration_ms = (end - start) * 1000
