@@ -3,6 +3,7 @@ import os
 import math
 from concurrent.futures import ThreadPoolExecutor
 import threading
+from dotenv import load_dotenv
 
 def save_frame_worker(frame_data):
     """Worker function to save a frame with resizing"""
@@ -131,22 +132,33 @@ def extract_frames(video_path, output_folder, interval_seconds=5, target_resolut
 
 # --- HOW TO USE ---
 if __name__ == '__main__':
+    load_dotenv()
 
-    input_video = input("Enter the path to your video file: ")
+    # 1. Get configuration from environment variables
+    input_video = os.getenv("VIDEO_PATH")
+    output_dir = os.getenv("OUTPUT_DIR", "dataset")  # Default to "dataset"
+    capture_interval = int(os.getenv("CAPTURE_INTERVAL", 5))
+    target_width = int(os.getenv("TARGET_RESOLUTION_WIDTH", 480))
+    target_height = int(os.getenv("TARGET_RESOLUTION_HEIGHT", 854))
 
-    # 2. Set the folder where you want to save the images
-    output_dir = "dataset"
+    # 2. Validate required environment variables
+    if not input_video:
+        print("Error: VIDEO_PATH environment variable not set. Please create a .env file and set it.")
+        exit()
 
-    # 3. Set the interval in seconds (e.g., 5 for one frame every 5 seconds)
-    capture_interval = int(input("Enter the frame capture interval in seconds (e.g., 5): "))
-    if capture_interval <= 0 or capture_interval > 3600:
-        print("Invalid interval. Using default of 5 seconds.")
+    # 3. Validate capture interval
+    if not 0 < capture_interval <= 3600:
+        print(f"Invalid capture interval: {capture_interval}. Must be between 1 and 3600 seconds.")
+        print("Using default of 5 seconds.")
         capture_interval = 5
 
-    # Run the function - 854x480 is proper 16:9 aspect ratio
+    # 4. Run the extraction function
+    target_resolution = (target_width, target_height)
     try:
-        extract_frames(input_video, output_dir, capture_interval, target_resolution=(480,854), max_workers=32)
+        extract_frames(input_video, output_dir, capture_interval, target_resolution=target_resolution, max_workers=32)
     except KeyboardInterrupt:
-        print("Extraction interrupted by user.")
+        print("\nExtraction interrupted by user.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
     finally:
-        print("Cleanup resources if needed.")
+        print("Script finished.")
