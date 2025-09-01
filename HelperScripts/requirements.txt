@@ -1,4 +1,4 @@
 python-dotenv
 opencv-python
 windows-capture
-ppadb
+adb-shell
