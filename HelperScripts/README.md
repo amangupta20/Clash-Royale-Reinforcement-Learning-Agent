@@ -71,3 +71,26 @@ A command-line utility to downscale an image to a specific resolution.
     python downscale.py <input_image_path> [output_image_path]
     ```
 -   **Configuration:** The target resolution is hardcoded to 480x854.
+
+### `py_adb.py`
+
+This script establishes communication with BlueStacks using ADB over the address `127.0.0.1:5555`. It provides an interactive shell-like interface to send ADB commands directly to the emulator.
+
+- **Input:** User-typed ADB shell commands (e.g., `ls /sdcard/`, `pm list packages`, `input keyevent 26`).  
+- **Output:** Command results printed in the terminal.  
+- **Configuration:**  
+  - Ensure `adb` is installed and added to your system PATH, or update the `ADB_PATH` variable in the script with the full path to your `adb` binary.  
+  - BlueStacks must have ADB enabled and running on port `5555`.  
+
+- **Usage:**
+```bash
+python py_adb.py
+```
+
+Once running, type ADB commands at the `adb>` prompt. For example:
+```
+adb> ls /sdcard/
+adb> pm list packages
+```
+
+Type `exit` or `quit` to leave the interactive session.
