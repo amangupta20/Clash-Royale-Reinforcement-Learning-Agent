@@ -3,3 +3,8 @@ vids
 dataset
 __pycache__
 misc
+.roo
+.roomodes
+generate_mcp_yaml.py
+system_prompt.md
+install_rooflow_conport.cmd
