@@ -10,3 +10,5 @@ system_prompt.md
 install_rooflow_conport.cmd
 context_portal
 HelperScripts/.env
+.vscode
+.github
