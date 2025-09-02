@@ -81,10 +81,6 @@ python HelperScripts/py_adb.py
 - Avoid deterministic frame pacing for action issuance.
 - Optional throttling & humanized randomization for non-critical actions.
 
-## ConPort Knowledge Base Integration
-
-Decisions, system patterns, technical specs, and progress items are synchronized via ConPort MCP (see context_portal/). This README reflects the currently logged early-phase decisions.
-
 ## License
 
 (Add a license file if intending to release publicly.)
