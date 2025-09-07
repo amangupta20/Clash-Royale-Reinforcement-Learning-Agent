@@ -32,3 +32,4 @@ Method Notes
 - Repeats=4 with warmup=1 to remove initial outlier. Stats aggregate over 3 kept repeats.
 - Confidence is summarized per frame by averaging the top‑k template scores, then aggregated (mean/median/p90/p95).
 - assets folder shows the assets everything was run on for this experiment
+- Multithreading: Tried workers=4 and workers=8 with OpenCV threads=1. For grayscale/2, per-frame matching is ~1 ms single-threaded, so thread pool overhead dominates and does not improve throughput materially. Decision: do not use multithreading for grayscale/2. Multithreading remains beneficial for larger ROIs (e.g., full/deck RGB) where avg_total_ms drops substantially.

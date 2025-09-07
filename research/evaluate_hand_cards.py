@@ -28,6 +28,7 @@ import subprocess
 import sys
 import time
 from typing import Dict, List, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -77,7 +78,13 @@ def preprocess_template(tpl, variant: str):
         raise ValueError(f"Unknown variant: {variant}")
 
 
-def match_templates(img, templates: List[Tuple[str, any]], method, threshold: float):
+def _match_one(img, tpl, method):
+    import cv2
+    res = cv2.matchTemplate(img, tpl, method)
+    return cv2.minMaxLoc(res)
+
+
+def match_templates(img, templates: List[Tuple[str, any]], method, threshold: float, workers: int = 1):
     """Run matchTemplate for each template; return list of detections and scores.
 
     Returns: list of dicts {name, max_val, max_loc, w, h, passed}
@@ -85,18 +92,37 @@ def match_templates(img, templates: List[Tuple[str, any]], method, threshold: fl
     import cv2  # local import
 
     results = []
-    for name, tpl in templates:
-        th, tw = tpl.shape[:2]
-        res = cv2.matchTemplate(img, tpl, method)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-        results.append({
-            "name": name,
-            "max_val": float(max_val),
-            "max_loc": tuple(int(x) for x in max_loc),
-            "w": int(tw),
-            "h": int(th),
-            "passed": bool(max_val >= threshold),
-        })
+    if workers and workers > 1:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = {}
+            for name, tpl in templates:
+                th, tw = tpl.shape[:2]
+                fut = ex.submit(_match_one, img, tpl, method)
+                futs[fut] = (name, tw, th)
+            for fut in as_completed(futs):
+                (name, tw, th) = futs[fut]
+                min_val, max_val, min_loc, max_loc = fut.result()
+                results.append({
+                    "name": name,
+                    "max_val": float(max_val),
+                    "max_loc": tuple(int(x) for x in max_loc),
+                    "w": int(tw),
+                    "h": int(th),
+                    "passed": bool(max_val >= threshold),
+                })
+    else:
+        for name, tpl in templates:
+            th, tw = tpl.shape[:2]
+            res = cv2.matchTemplate(img, tpl, method)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+            results.append({
+                "name": name,
+                "max_val": float(max_val),
+                "max_loc": tuple(int(x) for x in max_loc),
+                "w": int(tw),
+                "h": int(th),
+                "passed": bool(max_val >= threshold),
+            })
     return results
 
 
@@ -132,10 +158,17 @@ def _percentile(vals: List[float], p: float) -> float:
 
 
 def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | None, log_tags: str | None,
-             repeats: int = 3, warmup: int = 1, present_k: int | None = None) -> dict:
+             repeats: int = 3, warmup: int = 1, present_k: int | None = None, workers: int = 1, opencv_threads: int | None = None) -> dict:
     import cv2  # local import
 
     ensure_dir(out_dir)
+    # Configure OpenCV threading if requested
+    try:
+        cv2.setUseOptimized(True)
+        if opencv_threads is not None:
+            cv2.setNumThreads(int(opencv_threads))
+    except Exception:
+        pass
     # Inputs
     cards_dir = ROOT / "assets" / "cards"
     full_frames = [ROOT / "assets" / "deck" / "full_area.png", ROOT / "assets" / "deck" / "full_area_v2.png"]
@@ -203,7 +236,7 @@ def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | No
                 match_img = img_proc
 
                 t2 = time.perf_counter()
-                detections = match_templates(match_img, templates_proc, method, threshold)
+                detections = match_templates(match_img, templates_proc, method, threshold, workers=workers)
                 t3 = time.perf_counter()
 
                 # Only save annotations on the last repeat to keep outputs tidy
@@ -342,6 +375,8 @@ def parse_args():
     ap.add_argument("--repeats", type=int, default=3, help="Number of repeated runs for timing stats")
     ap.add_argument("--warmup", type=int, default=1, help="Number of initial repeats to discard as warmup")
     ap.add_argument("--present-k", type=int, default=None, help="Expected number of present cards (top-k). Defaults to config.present_k or 4.")
+    ap.add_argument("--workers", type=int, default=1, help="Parallel workers for template matching (per frame). Set >1 to enable multithreading across templates.")
+    ap.add_argument("--opencv-threads", type=int, default=None, help="Force OpenCV internal threads (set to 1 when using --workers to avoid oversubscription).")
     return ap.parse_args()
 
 
@@ -351,7 +386,8 @@ def main():
     out_dir = pathlib.Path(args.out)
     cfg = load_config(cfg_path)
     res = run_eval(cfg, out_dir, bool(args.log_run), args.log_name, args.log_tags,
-                   repeats=args.repeats, warmup=args.warmup, present_k=args.present_k)
+                   repeats=args.repeats, warmup=args.warmup, present_k=args.present_k,
+                   workers=args.workers, opencv_threads=args.opencv_threads)
     print(json.dumps(res, indent=2))
 
 
