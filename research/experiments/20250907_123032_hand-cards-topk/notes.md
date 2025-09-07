@@ -31,3 +31,4 @@ Method Notes
 
 - Repeats=4 with warmup=1 to remove initial outlier. Stats aggregate over 3 kept repeats.
 - Confidence is summarized per frame by averaging the top‑k template scores, then aggregated (mean/median/p90/p95).
+- assets folder shows the assets everything was run on for this experiment
