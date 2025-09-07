@@ -132,7 +132,7 @@ def _percentile(vals: List[float], p: float) -> float:
 
 
 def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | None, log_tags: str | None,
-             repeats: int = 3, warmup: int = 1) -> dict:
+             repeats: int = 3, warmup: int = 1, present_k: int | None = None) -> dict:
     import cv2  # local import
 
     ensure_dir(out_dir)
@@ -162,6 +162,7 @@ def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | No
 
     method = getattr(cv2, cfg.get("method", "TM_CCOEFF_NORMED"))
     threshold = float(cfg.get("threshold", 0.85))
+    k_present = int(present_k if present_k is not None else cfg.get("present_k", 4))
 
     # Output CSV for detailed scores
     csv_path = out_dir / "scores.csv"
@@ -173,16 +174,21 @@ def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | No
 
     for variant, frames in variants:
         agg_prep, agg_match, agg_total = [], [], []
-        agg_pass = 0
-        agg_scores: List[float] = []
+        agg_pass_all = 0
+        agg_scores_all: List[float] = []
+        # For top-k metrics per frame
+        agg_topk_avg_vals: List[float] = []  # per frame average of top-k max_vals
+        agg_topk_detection_rates: List[float] = []  # per frame (#above_thresh in top-k)/k
 
         # Preprocess templates once per variant
         templates_proc = [(name, preprocess_template(tpl, variant)) for name, tpl in templates_raw]
 
         for r in range(repeats):
             run_prep, run_match, run_total = [], [], []
-            run_pass = 0
-            run_scores: List[float] = []
+            run_pass_all = 0
+            run_scores_all: List[float] = []
+            run_topk_avg_vals: List[float] = []
+            run_topk_rates: List[float] = []
 
             for frame_path in frames:
                 img_color = cv2.imread(str(frame_path), cv2.IMREAD_COLOR)
@@ -208,8 +214,19 @@ def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | No
                 # Write CSV rows (record all repeats)
                 for det in detections:
                     writer.writerow([variant, frame_path.name, det["name"], f"{det['max_val']:.6f}", int(det["passed"])])
-                    run_pass += int(det["passed"])
-                    run_scores.append(det["max_val"])
+                    run_pass_all += int(det["passed"])
+                    run_scores_all.append(det["max_val"])
+
+                # Compute top-k per-frame metrics
+                # Sort all scores desc, take top-k
+                sorted_scores = sorted((d["max_val"] for d in detections), reverse=True)
+                topk = sorted_scores[:max(1, k_present)]
+                topk_avg = sum(topk) / float(len(topk))
+                topk_above = sum(1 for s in topk if s >= threshold)
+                topk_rate = topk_above / float(len(topk))
+
+                run_topk_avg_vals.append(topk_avg)
+                run_topk_rates.append(topk_rate)
 
                 run_prep.append((t1 - t0) * 1000.0)
                 run_match.append((t3 - t2) * 1000.0)
@@ -220,23 +237,54 @@ def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | No
                 agg_prep.extend(run_prep)
                 agg_match.extend(run_match)
                 agg_total.extend(run_total)
-                agg_pass += run_pass
-                agg_scores.extend(run_scores)
+                agg_pass_all += run_pass_all
+                agg_scores_all.extend(run_scores_all)
+                # one entry per frame for top-k metrics
+                agg_topk_avg_vals.extend(run_topk_avg_vals)
+                agg_topk_detection_rates.extend(run_topk_rates)
 
         # Aggregate per-variant metrics after repeats
         if agg_total:
+            # Stats over all-template scores (legacy)
+            all_scores_mean = float(statistics.mean(agg_scores_all)) if agg_scores_all else 0.0
+            all_scores_median = _percentile(agg_scores_all, 0.5)
+            all_scores_p90 = _percentile(agg_scores_all, 0.90)
+            all_scores_p95 = _percentile(agg_scores_all, 0.95)
+            all_scores_max = max(agg_scores_all) if agg_scores_all else 0.0
+            all_scores_min = min(agg_scores_all) if agg_scores_all else 0.0
+
+            # Top-k per-frame metrics
+            topk_avg_mean = float(statistics.mean(agg_topk_avg_vals)) if agg_topk_avg_vals else 0.0
+            topk_avg_median = _percentile(agg_topk_avg_vals, 0.5)
+            topk_avg_p90 = _percentile(agg_topk_avg_vals, 0.90)
+            topk_avg_p95 = _percentile(agg_topk_avg_vals, 0.95)
+            topk_rate_mean = float(statistics.mean(agg_topk_detection_rates)) if agg_topk_detection_rates else 0.0
+            topk_rate_median = _percentile(agg_topk_detection_rates, 0.5)
+
             metrics[variant] = {
                 "avg_prep_ms": float(statistics.mean(agg_prep)),
                 "avg_match_ms": float(statistics.mean(agg_match)),
                 "avg_total_ms": float(statistics.mean(agg_total)),
-                "detections_passed": int(agg_pass),
-                "avg_max_val": float(statistics.mean(agg_scores)) if agg_scores else 0.0,
-                "median_max_val": _percentile(agg_scores, 0.5),
-                "p90_max_val": _percentile(agg_scores, 0.90),
-                "p95_max_val": _percentile(agg_scores, 0.95),
-                "max_max_val": max(agg_scores) if agg_scores else 0.0,
-                "min_max_val": min(agg_scores) if agg_scores else 0.0,
-                "detection_rate": float(agg_pass) / float(len(frames) * len(templates_proc) * max(1, repeats - warmup)),
+                # Legacy all-templates stats (kept for reference)
+                "all_templates": {
+                    "detections_passed": int(agg_pass_all),
+                    "avg_max_val": all_scores_mean,
+                    "median_max_val": all_scores_median,
+                    "p90_max_val": all_scores_p90,
+                    "p95_max_val": all_scores_p95,
+                    "max_max_val": all_scores_max,
+                    "min_max_val": all_scores_min,
+                    "detection_rate": float(agg_pass_all) / float(len(frames) * len(templates_proc) * max(1, repeats - warmup)),
+                },
+                # Top-k present-cards oriented metrics
+                "present_k": k_present,
+                "topk_avg_max_val_mean": topk_avg_mean,
+                "topk_avg_max_val_median": topk_avg_median,
+                "topk_avg_max_val_p90": topk_avg_p90,
+                "topk_avg_max_val_p95": topk_avg_p95,
+                "topk_detection_rate_mean": topk_rate_mean,
+                "topk_detection_rate_median": topk_rate_median,
+                # Context
                 "frames": len(frames),
                 "templates": len(templates_proc),
                 "threshold": threshold,
@@ -293,6 +341,7 @@ def parse_args():
     ap.add_argument("--log-tags", default="cv,ablation,hand-cards", help="Comma-separated tags for experiment log")
     ap.add_argument("--repeats", type=int, default=3, help="Number of repeated runs for timing stats")
     ap.add_argument("--warmup", type=int, default=1, help="Number of initial repeats to discard as warmup")
+    ap.add_argument("--present-k", type=int, default=None, help="Expected number of present cards (top-k). Defaults to config.present_k or 4.")
     return ap.parse_args()
 
 
@@ -301,7 +350,8 @@ def main():
     cfg_path = pathlib.Path(args.config)
     out_dir = pathlib.Path(args.out)
     cfg = load_config(cfg_path)
-    res = run_eval(cfg, out_dir, bool(args.log_run), args.log_name, args.log_tags, repeats=args.repeats, warmup=args.warmup)
+    res = run_eval(cfg, out_dir, bool(args.log_run), args.log_name, args.log_tags,
+                   repeats=args.repeats, warmup=args.warmup, present_k=args.present_k)
     print(json.dumps(res, indent=2))
 
 
