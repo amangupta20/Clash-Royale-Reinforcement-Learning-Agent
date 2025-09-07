@@ -1,0 +1,8 @@
+is_air
+attack_air
+is_wincondition
+is_tank
+is_swarm
+is_spell
+is_aoe
+is_building

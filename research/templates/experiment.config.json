@@ -1,0 +1,31 @@
+{
+  "experiment": {
+    "name": "SAMPLE_FILL_ME",
+    "tags": ["sample"],
+    "seed": 42,
+    "notes": "Short purpose statement"
+  },
+  "capture": {
+    "library": "windows-capture",
+    "window_name": "BlueStacks App Player 1",
+    "crop": { "left": 657, "right": 657, "top": 0, "bottom": 0 },
+    "target_resolution": { "width": 480, "height": 854 }
+  },
+  "cv_pipeline": {
+    "hand_cards": {
+      "method": "opencv_template_match",
+      "templates_dir": "dataset/cards/"
+    },
+    "elixir": { "method": "pixel_count", "roi": [0, 0, 100, 20] },
+    "ocr": { "enabled": false, "engine": "tesseract", "regions": [] },
+    "color_mode": {
+      "mode": "grayscale_div2",
+      "order": "downscale_then_grayscale"
+    }
+  },
+  "evaluation": {
+    "dataset_subset": "SAMPLE_FILL_ME",
+    "frames": 500,
+    "metrics": ["fps", "cap_latency_ms", "prep_latency_ms", "card_match_acc"]
+  }
+}

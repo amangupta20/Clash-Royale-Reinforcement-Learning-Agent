@@ -1,0 +1,45 @@
+{
+  "num_variants": 4,
+  "variants": {
+    "deck_gray_div2": {
+      "avg_match_ms": 4.370449998532422,
+      "avg_max_val": 0.7076163627207279,
+      "avg_prep_ms": 0.12415000674081966,
+      "avg_total_ms": 4.496450004808139,
+      "detections_passed": 8,
+      "frames": 2,
+      "templates": 8,
+      "threshold": 0.85
+    },
+    "deck_rgb": {
+      "avg_match_ms": 61.67885000468232,
+      "avg_max_val": 0.7135829962790012,
+      "avg_prep_ms": 0.006100002792663872,
+      "avg_total_ms": 61.71740000718273,
+      "detections_passed": 8,
+      "frames": 2,
+      "templates": 8,
+      "threshold": 0.85
+    },
+    "deck_rgb_div2": {
+      "avg_match_ms": 16.697900005965494,
+      "avg_max_val": 0.7011990398168564,
+      "avg_prep_ms": 0.033549993531778455,
+      "avg_total_ms": 16.732399999455083,
+      "detections_passed": 8,
+      "frames": 2,
+      "templates": 8,
+      "threshold": 0.85
+    },
+    "full_rgb": {
+      "avg_match_ms": 473.0070000005071,
+      "avg_max_val": 0.7137638237327337,
+      "avg_prep_ms": 0.007100003131199628,
+      "avg_total_ms": 473.05505000258563,
+      "detections_passed": 8,
+      "frames": 2,
+      "templates": 8,
+      "threshold": 0.85
+    }
+  }
+}

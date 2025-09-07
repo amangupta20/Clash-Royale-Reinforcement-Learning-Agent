@@ -81,10 +81,6 @@ python HelperScripts/py_adb.py
 - Avoid deterministic frame pacing for action issuance.
 - Optional throttling & humanized randomization for non-critical actions.
 
-## License
-
-(Add a license file if intending to release publicly.)
-
 ---
 
 _This README will expand as the project transitions from tooling prototypes to the formal RL environment and training stack._
