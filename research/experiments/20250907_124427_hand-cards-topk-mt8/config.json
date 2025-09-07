@@ -1,0 +1,5 @@
+{
+  "method": "TM_CCOEFF_NORMED",
+  "notes": "Compare full area vs deck area, and downscale and grayscale options for hand card detection using OpenCV template matching.",
+  "threshold": 0.85
+}
