@@ -3,7 +3,6 @@ import cv2 as cv
 import numpy as np
 import os
 from dotenv import load_dotenv
-import time
 
 load_dotenv()
 
@@ -77,8 +76,5 @@ def on_frame_arrived(frame: Frame, capture_control: InternalCaptureControl):
 def on_closed():
     print("Capture Session Closed")
 
-start=time.time()
-for _ in range(3):
-    capture.start()
-end=time.time()
-print(f"Capture started and ended in {(end - start)/3} seconds")
+
+capture.start()
