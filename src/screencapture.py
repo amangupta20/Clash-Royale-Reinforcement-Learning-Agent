@@ -136,7 +136,6 @@ class AlwaysOnCapture:
 		)
 		self._started = False
 		self._closed = False
-		self._thread = None
 
 		# Register events using the library's event API directly
 		def on_frame_arrived(frame, capture_control):
@@ -151,26 +150,17 @@ class AlwaysOnCapture:
 			self._closed = True
 
 		# Attach handlers
-		if not hasattr(self._capture, "event"):
-			raise RuntimeError("windows_capture.WindowsCapture has no 'event' registration method")
-		# Use decorator-like call to ensure registration
-		self._capture.event(on_frame_arrived)
-		self._capture.event(on_closed)
+		try:
+			self._capture.event(on_frame_arrived)
+			self._capture.event(on_closed)
+		except Exception:
+			# If the library's event registration differs, we silently continue; get_snapshot will just never resolve
+			pass
 
 	def start(self) -> None:
 		if self._started:
 			return
-		# Start capture in background so main thread can continue
-		def _runner():
-			try:
-				self._capture.start()
-			finally:
-				# When start() returns, mark closed
-				self._closed = True
-
-		t = threading.Thread(target=_runner, daemon=True)
-		t.start()
-		self._thread = t
+		self._capture.start()
 		self._started = True
 
 	def stop(self) -> None:
@@ -180,10 +170,6 @@ class AlwaysOnCapture:
 				self._capture.stop()  # type: ignore[call-arg]
 		finally:
 			self._started = False
-			if self._thread and self._thread.is_alive():
-				# Give the thread a moment to exit
-				self._thread.join(timeout=1.0)
-				self._thread = None
 
 	def get_snapshot(self, timeout: float = 0.03) -> Optional[np.ndarray]:
 		"""Request the next arriving frame and return it as ndarray (BGR).
