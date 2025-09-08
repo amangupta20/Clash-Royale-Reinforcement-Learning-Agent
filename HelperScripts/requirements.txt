@@ -1,4 +1,0 @@
-python-dotenv
-opencv-python
-windows-capture
-adb-shell

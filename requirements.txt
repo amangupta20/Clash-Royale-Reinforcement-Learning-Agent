@@ -1,0 +1,4 @@
+python-dotenv
+opencv-python
+https://github.com/amangupta20/windows-capture.git#subdirectory=windows-capture-python
+adb-shell
