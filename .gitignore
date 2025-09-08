@@ -12,3 +12,4 @@ context_portal
 HelperScripts/.env
 .vscode
 .github
+src/.env
