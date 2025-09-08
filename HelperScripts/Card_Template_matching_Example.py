@@ -3,7 +3,7 @@ import numpy as np
 import time
 import os
 from dotenv import load_dotenv
-import cardslot
+
 load_dotenv()
 
 # Get environment variables
@@ -46,7 +46,7 @@ min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
 threshold = 0.6
 if max_val >= threshold:
     print(f"Best match: {max_val} at location {max_loc}")
-    print(f"Card slot: {cardslot.which_slot(max_loc)}")
+    
     cv.rectangle(game_image, max_loc, (max_loc[0] + knight.shape[1], max_loc[1] + knight.shape[0]), (0, 255, 0), 2)
     cv.imshow("Matched Result", game_image)
     cv.waitKey(0)
