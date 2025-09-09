@@ -1,5 +1,5 @@
 import json
-from template_matcher_roi import ROIBasedDeckMatcher
+from template_matcher_frame_cache import FrameCachedDeckMatcher
 import cv2 as cv
 import threading
 import time
@@ -29,9 +29,11 @@ def __main__():
         print(f"Error: {e}")
         print("Exiting ...")
         return
-
+    
     stop_event = threading.Event()
     buffer = DoubleBuffer()
+    count = 0
+    tim = 0
 
     # Start the capture thread
     capture = threading.Thread(target=capture_thread, args=(buffer, stop_event))
@@ -45,24 +47,27 @@ def __main__():
             break
         time.sleep(0.5)
 
-    # Initialize the ROI-based DeckMatcher
-    print("Testing ROI-based template matching...")
-    deck_matcher = ROIBasedDeckMatcher(deck)
+    # FRAME CACHE ONLY TEST
+    print("Testing FRAME PREPROCESSING CACHE only...")
+    deck_matcher = FrameCachedDeckMatcher(deck)
     
     processing_times = []
+    cache_hits = 0
     try:
         while not stop_event.is_set():
             frame = buffer.read()
             if frame is not None:
-                start_time = time.perf_counter()
-                detected_slots = deck_matcher.detect_slots_roi_based(frame)
-                end_time = time.perf_counter()
+                count += 1
+                start = time.perf_counter()
+                detected_slots = deck_matcher.detect_slots(frame)
+                end = time.perf_counter()
                 
-                processing_time = (end_time - start_time) * 1000  # Convert to ms
+                processing_time = (end - start) * 1000  # ms
+                tim += end - start
                 processing_times.append(processing_time)
                 
                 print(f"Detected slots: {detected_slots}")
-            time.sleep(5)
+            time.sleep(1)
     except KeyboardInterrupt:
         print("Stopping threads...")
         stop_event.set()
@@ -73,10 +78,11 @@ def __main__():
         avg_time = sum(processing_times) / len(processing_times)
         min_time = min(processing_times)
         max_time = max(processing_times)
-        print(f"Performance summary:")
+        print(f"FRAME CACHE Performance:")
         print(f"  Average: {avg_time:.1f}ms")
-        print(f"  Min: {min_time:.1f}ms") 
+        print(f"  Min: {min_time:.1f}ms")
         print(f"  Max: {max_time:.1f}ms")
+        print(f"  Total samples: {len(processing_times)}")
     
     print("Threads stopped.")
 
