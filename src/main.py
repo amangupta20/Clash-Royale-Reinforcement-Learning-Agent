@@ -41,11 +41,29 @@ def __main__():
     # Start the capture thread
     capture = threading.Thread(target=capture_thread, args=(buffer, stop_event))
     capture.start()
+
+    # Wait for the first frame to be captured
+    print("Waiting for the first frame...")
+    while not stop_event.is_set():
+        if buffer.read() is not None:
+            print("First frame received!")
+            break
+        time.sleep(0.5)
+
     # Initialize the DeckMatcher with the loaded deck
     deck_matcher = DeckMatcher(deck)
-    game_state_image_path="assets/deck/full_area_v2.png"
-    game_image = cv.imread(game_state_image_path, cv.IMREAD_REDUCED_GRAYSCALE_2)
-    detected_slots = deck_matcher.detect_slots(game_image)
-    print(f"Detected slots: {detected_slots}")
+    try:
+        while not stop_event.is_set():
+            frame = buffer.read()
+            if frame is not None:
+                detected_slots = deck_matcher.detect_slots(frame)
+            time.sleep(5)
+    except KeyboardInterrupt:
+        print("Stopping threads...")
+        stop_event.set()
+    
+    capture.join()
+    print("Threads stopped.")
+
 
 __main__()
