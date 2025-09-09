@@ -1,4 +1,5 @@
 python-dotenv
 opencv-python
-https://github.com/amangupta20/windows-capture.git#subdirectory=windows-capture-python
+https://github.com/amangupta20/windows-capture/releases/download/v1.5.0/windows_capture-1.5.0-cp39-abi3-win_amd64.whl; platform_system == "Windows"
+
 adb-shell
