@@ -10,13 +10,13 @@ class DeckMatcher:
     def load_templates(self):
         templates = []
         for card in self.deck:
-            template = cv.imread(f"assets/cards/{card}.png", cv.IMREAD_REDUCED_GRAYSCALE_2)
+            template = cv.imread(f"assets/cards/{card}.png", cv.IMREAD_GRAYSCALE)
             if template is not None:
                 templates.append((card, template))
         return templates
     def detect_slots(self, frame):
         crop_frame = crop(frame)
-        game_image = cv.cvtColor(crop_frame, cv.COLOR_BGR2GRAY, 2)
+        game_image = cv.cvtColor(crop_frame, cv.COLOR_BGR2GRAY)
         if game_image is None:
             print("Error: Failed to crop frame, returning empty slot detection")
             return dict((i, None) for i in range(1, 5))
@@ -26,10 +26,10 @@ class DeckMatcher:
         for card in self.templates:
             result = cv.matchTemplate(game_image, card[1], cv.TM_CCOEFF_NORMED)
             min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
-            print(f"Detected {card[0]} with confidence {max_val} at location {max_loc}")            
+           
             threshold = 0.8
             if max_val >= threshold:
-
+                print(f"Detected {card[0]} with confidence {max_val} at location {max_loc}")
                  # Determine which slot the card belongs to 
                 slot = cardslot.which_slot(max_loc)
                 if slot is not None and detected_slots[slot] is None:

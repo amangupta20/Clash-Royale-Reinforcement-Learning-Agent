@@ -57,6 +57,7 @@ def __main__():
             frame = buffer.read()
             if frame is not None:
                 detected_slots = deck_matcher.detect_slots(frame)
+                print(f"Detected slots: {detected_slots}")
             time.sleep(5)
     except KeyboardInterrupt:
         print("Stopping threads...")
