@@ -2,9 +2,7 @@ import cv2 as cv
 import cardslot
 import time
 import numpy as np
-import hashlib
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
 
 class DeckMatcher:
     def __init__(self, deck=None):
@@ -19,12 +17,6 @@ class DeckMatcher:
         
         # Pre-allocate slot mapping ranges for faster slot detection
         self.slot_ranges = [(0, 40), (40, 80), (80, 120), (120, 160)]
-        
-        # Caching for performance
-        self._frame_cache = {}  # Cache preprocessed frames
-        self._result_cache = {}  # Cache slot detection results
-        self._cache_max_size = 100  # Keep last 100 frames (larger cache)
-        self._similarity_threshold = 0.95  # For fuzzy frame matching
 
     def load_templates(self):
         templates = []
@@ -33,51 +25,6 @@ class DeckMatcher:
             if template is not None:
                 templates.append((card, template))
         return templates
-    
-    def _get_frame_hash(self, frame):
-        """Generate a quick hash of the relevant frame region for caching"""
-        # Only hash the deck area for speed
-        height, width = frame.shape[:2]
-        CROP_LEFT, CROP_RIGHT, CROP_TOP, CROP_BOT = 783, 720, 845, 46
-        
-        # More aggressive downsampling for fuzzy matching
-        deck_region = frame[CROP_TOP:height-CROP_BOT:8, CROP_LEFT:width-CROP_RIGHT:8]  # Every 8th pixel
-        return hashlib.md5(deck_region.tobytes()).hexdigest()[:12]  # Shorter hash for more collisions
-    
-    def _find_similar_cached_result(self, frame_hash):
-        """Look for similar frames in cache using fuzzy matching"""
-        # First try exact match
-        if frame_hash in self._result_cache:
-            return self._result_cache[frame_hash]
-        
-        # For fuzzy matching, we'd need more sophisticated comparison
-        # For now, just return None - exact matching is more reliable
-        return None
-    
-    def _preprocess_frame_cached(self, frame):
-        """Cache preprocessed frames to avoid repeated work"""
-        frame_hash = self._get_frame_hash(frame)
-        
-        if frame_hash in self._frame_cache:
-            return self._frame_cache[frame_hash]
-        
-        # Preprocess frame
-        cropped = crop(frame)
-        if cropped is None:
-            return None
-            
-        gray = cv.cvtColor(cropped, cv.COLOR_BGR2GRAY)
-        game_image = cv.resize(gray, (gray.shape[1] // 2, gray.shape[0] // 2), interpolation=cv.INTER_AREA)
-        
-        # Cache management - keep only recent frames
-        if len(self._frame_cache) >= self._cache_max_size:
-            # Remove oldest 20 entries to avoid constant cleanup
-            keys_to_remove = list(self._frame_cache.keys())[:20]
-            for key in keys_to_remove:
-                del self._frame_cache[key]
-        
-        self._frame_cache[frame_hash] = game_image
-        return game_image
     def _fast_which_slot(self, x):
         """Optimized slot detection without function call overhead"""
         if x < 40:
@@ -100,20 +47,15 @@ class DeckMatcher:
     def detect_slots(self, frame):
         overall_start = time.perf_counter()
         
-        # Quick cache check first
-        frame_hash = self._get_frame_hash(frame)
-        cached_result = self._find_similar_cached_result(frame_hash)
-        if cached_result is not None:
-            overall_end = time.perf_counter()
-            total_time = (overall_end - overall_start) * 1000
-            print(f"CACHED RESULT: {total_time:.1f}ms")
-            return cached_result
-        
-        # Time preprocessing with caching
+        # Time preprocessing
         preprocess_start = time.perf_counter()
-        game_image = self._preprocess_frame_cached(frame)
-        if game_image is None:
+        cropped = crop(frame)
+        if cropped is None:
             return dict((i, None) for i in range(1, 5))
+            
+        # Convert to grayscale and resize in one go
+        gray = cv.cvtColor(cropped, cv.COLOR_BGR2GRAY)
+        game_image = cv.resize(gray, (gray.shape[1] // 2, gray.shape[0] // 2), interpolation=cv.INTER_AREA)
         preprocess_end = time.perf_counter()
         preprocess_time = (preprocess_end - preprocess_start) * 1000
             
@@ -146,14 +88,6 @@ class DeckMatcher:
             if detected_slots[slot] is None:
                 detected_slots[slot] = card_name
         assignment_end = time.perf_counter()
-        
-        # Cache the result with batch cleanup
-        if len(self._result_cache) >= self._cache_max_size:
-            # Remove oldest 20 entries
-            keys_to_remove = list(self._result_cache.keys())[:20]
-            for key in keys_to_remove:
-                del self._result_cache[key]
-        self._result_cache[frame_hash] = detected_slots
         
         overall_end = time.perf_counter()
         
