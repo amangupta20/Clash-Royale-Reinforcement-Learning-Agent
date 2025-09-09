@@ -4,7 +4,9 @@ from template_matcher import DeckMatcher
 
 import cv2 as cv
 
-
+import threading
+import time
+from capture import DoubleBuffer, capture_thread
 
 def __main__():
 
@@ -33,10 +35,15 @@ def __main__():
         print(f"Error: {e}")
         print("Exiting ...")
         return
-    
+    stop_event = threading.Event()
+    buffer = DoubleBuffer()
+
+    # Start the capture thread
+    capture = threading.Thread(target=capture_thread, args=(buffer, stop_event))
+    capture.start()
     # Initialize the DeckMatcher with the loaded deck
     deck_matcher = DeckMatcher(deck)
-    game_state_image_path="assets/deck/deck_area.png"
+    game_state_image_path="assets/deck/full_area_v2.png"
     game_image = cv.imread(game_state_image_path, cv.IMREAD_REDUCED_GRAYSCALE_2)
     detected_slots = deck_matcher.detect_slots(game_image)
     print(f"Detected slots: {detected_slots}")

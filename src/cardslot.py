@@ -7,4 +7,5 @@ def which_slot(tup):
         return 3
     elif tup[0] > 120 and tup[0] < 160:
         return 4
-    pass
+    else:
+        return None  # Explicitly return None for coordinates outside valid ranges
