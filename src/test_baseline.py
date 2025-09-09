@@ -1,5 +1,5 @@
 import json
-from template_matcher_ultra_fast import UltraFastDeckMatcher
+from template_matcher import DeckMatcher
 import cv2 as cv
 import threading
 import time
@@ -29,9 +29,11 @@ def __main__():
         print(f"Error: {e}")
         print("Exiting ...")
         return
-
+    
     stop_event = threading.Event()
     buffer = DoubleBuffer()
+    count = 0
+    tim = 0
 
     # Start the capture thread
     capture = threading.Thread(target=capture_thread, args=(buffer, stop_event))
@@ -45,24 +47,26 @@ def __main__():
             break
         time.sleep(0.5)
 
-    # Initialize the ULTRA FAST DeckMatcher
-    print("Testing ULTRA FAST template matching...")
-    deck_matcher = UltraFastDeckMatcher(deck)
+    # BASELINE: Original DeckMatcher without any caching
+    print("Testing BASELINE - No caching...")
+    deck_matcher = DeckMatcher(deck)
     
     processing_times = []
     try:
         while not stop_event.is_set():
             frame = buffer.read()
             if frame is not None:
-                start_time = time.perf_counter()
-                detected_slots = deck_matcher.detect_slots_ultra_fast(frame)
-                end_time = time.perf_counter()
+                count += 1
+                start = time.perf_counter()
+                detected_slots = deck_matcher.detect_slots(frame)
+                end = time.perf_counter()
                 
-                processing_time = (end_time - start_time) * 1000  # Convert to ms
+                processing_time = (end - start) * 1000  # ms
+                tim += end - start
                 processing_times.append(processing_time)
                 
                 print(f"Detected slots: {detected_slots}")
-            time.sleep(5)
+            time.sleep(1)
     except KeyboardInterrupt:
         print("Stopping threads...")
         stop_event.set()
@@ -73,10 +77,11 @@ def __main__():
         avg_time = sum(processing_times) / len(processing_times)
         min_time = min(processing_times)
         max_time = max(processing_times)
-        print(f"Performance summary:")
+        print(f"BASELINE Performance:")
         print(f"  Average: {avg_time:.1f}ms")
-        print(f"  Min: {min_time:.1f}ms") 
+        print(f"  Min: {min_time:.1f}ms")
         print(f"  Max: {max_time:.1f}ms")
+        print(f"  Total samples: {len(processing_times)}")
     
     print("Threads stopped.")
 

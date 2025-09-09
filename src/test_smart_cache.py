@@ -1,67 +1,53 @@
 import json
-import sys
-from template_matcher import DeckMatcher
+from template_matcher import DeckMatcher  # Use original without frame cache
 import cv2 as cv
 import threading
 import time
 from capture import DoubleBuffer, capture_thread
 
-class SmartCachedDetector:
+class SmartResultCache:
     def __init__(self, deck_matcher):
         self.deck_matcher = deck_matcher
         self.last_result = None
         self.last_detection_time = 0
-        self.cache_duration = 2.0  # Cache results for 2 seconds
-        self.result_history = []  # Track recent results for stability
-        self.stability_threshold = 3  # Need 3 consistent results before caching
+        self.cache_duration = 2.0
+        self.result_history = []
+        self.stability_threshold = 3
+        self.cache_hits = 0
+        self.total_calls = 0
     
-    def detect_slots(self, frame):
+    def detect_with_smart_caching(self, frame):
+        self.total_calls += 1
         current_time = time.time()
         
-        # Check cache hit
+        # Check if we have a recent cached result
         if (self.last_result is not None and 
             current_time - self.last_detection_time < self.cache_duration):
-            print(f"CACHE HIT: Using cached result ({current_time - self.last_detection_time:.1f}s old)")
-            return self.last_result
+            self.cache_hits += 1
+            print(f"SMART CACHE HIT: Using result from {current_time - self.last_detection_time:.1f}s ago")
+            return self.last_result, True
         
-        # Perform new detection
+        # Perform detection
         result = self.deck_matcher.detect_slots(frame)
         
-        # Update stability tracking
+        # Check if result is stable
         self.result_history.append(result)
         if len(self.result_history) > self.stability_threshold:
             self.result_history.pop(0)
         
-        # Cache if stable
+        # If we have consistent results, cache them
         if (len(self.result_history) >= self.stability_threshold and 
             all(r == result for r in self.result_history)):
             self.last_result = result
             self.last_detection_time = current_time
-            print(f"CACHED: Stable result {result}")
+            print(f"CACHING STABLE RESULT: {result}")
         
-        return result
+        return result, False
 
 def __main__():
-    # Check for caching mode argument
-    use_smart_caching = False
-    if len(sys.argv) > 1:
-        if sys.argv[1].lower() in ['cache', 'cached', 'smart']:
-            use_smart_caching = True
-            print("🚀 Using SMART CACHING mode for enhanced performance")
-        elif sys.argv[1].lower() in ['normal', 'original', 'no-cache']:
-            use_smart_caching = False
-            print("🔧 Using ORIGINAL mode (no caching)")
-        else:
-            print("Usage: python main.py [cache|normal]")
-            print("  cache  - Use smart caching for better performance")
-            print("  normal - Use original detection without caching")
-            return
-    else:
-        print("🔧 Using ORIGINAL mode (no caching) - use 'python main.py cache' for smart caching")
-
-    # loading card deck from the json file
+    # Loading card deck from the json file
     deck_path = "deck.json"
-    deck=[]
+    deck = []
     try:
         with open(deck_path, "r") as f:
             deck = json.load(f)
@@ -69,8 +55,6 @@ def __main__():
                 raise ValueError("Deck must contain exactly 8 cards.")
                 return 
             print(f"the cards in the current deck are {deck}")
-
-
 
     except FileNotFoundError:
         print(f"File not found: {deck_path}")
@@ -84,10 +68,12 @@ def __main__():
         print(f"Error: {e}")
         print("Exiting ...")
         return
+    
     stop_event = threading.Event()
     buffer = DoubleBuffer()
     count = 0
     tim = 0
+
     # Start the capture thread
     capture = threading.Thread(target=capture_thread, args=(buffer, stop_event))
     capture.start()
@@ -100,35 +86,45 @@ def __main__():
             break
         time.sleep(0.5)
 
-    # Initialize the DeckMatcher
-    deck_matcher = DeckMatcher(deck)
+    # SMART RESULT CACHE ONLY TEST
+    print("Testing SMART RESULT CACHE only...")
+    deck_matcher = DeckMatcher(deck)  # Original without frame cache
+    smart_cache = SmartResultCache(deck_matcher)
     
-    # Choose detection mode
-    if use_smart_caching:
-        detector = SmartCachedDetector(deck_matcher)
-        print("✅ Smart caching detector initialized")
-    else:
-        detector = deck_matcher
-        print("✅ Original detector initialized")
-        
+    processing_times = []
     try:
         while not stop_event.is_set():
             frame = buffer.read()
             if frame is not None:
-                count+=1
-                start = time.time()
-                detected_slots = detector.detect_slots(frame)
-                end = time.time()
-                tim += end-start
+                count += 1
+                start = time.perf_counter()
+                detected_slots, was_cached = smart_cache.detect_with_smart_caching(frame)
+                end = time.perf_counter()
+                
+                processing_time = (end - start) * 1000  # ms
+                tim += end - start
+                processing_times.append(processing_time)
+                
                 print(f"Detected slots: {detected_slots}")
             time.sleep(1)
     except KeyboardInterrupt:
         print("Stopping threads...")
-        print(f"average processing time: {tim/count:.4f} seconds")
         stop_event.set()
     
     capture.join()
+    
+    if processing_times:
+        avg_time = sum(processing_times) / len(processing_times)
+        min_time = min(processing_times)
+        max_time = max(processing_times)
+        cache_hit_rate = (smart_cache.cache_hits / smart_cache.total_calls) * 100
+        print(f"SMART CACHE Performance:")
+        print(f"  Average: {avg_time:.1f}ms")
+        print(f"  Min: {min_time:.1f}ms")
+        print(f"  Max: {max_time:.1f}ms")
+        print(f"  Cache hit rate: {cache_hit_rate:.1f}%")
+        print(f"  Total samples: {len(processing_times)}")
+    
     print("Threads stopped.")
-
 
 __main__()
