@@ -2,6 +2,24 @@ import cv2 as cv
 import cardslot
 import time
 import numpy as np
+
+class DeckMatcher:
+    def __init__(self, deck=None):
+        if deck is None:
+            raise ValueError("Deck is required")
+        self.deck = deck
+        self.templates = self.load_templates()
+        # Check for CUDA support
+        self.use_gpu = cv.cuda.getCudaEnabledDeviceCount() > 0
+        if self.use_gpu:
+            print(f"GPU acceleration enabled: {cv.cuda.getCudaEnabledDeviceCount()} devices")
+        else:
+            print("GPU acceleration not available, using CPU optimizations")
+            cv.setUseOptimized(True)
+            cv.setNumThreads(4)  # Use more threads for CPU
+import cardslot
+import time
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
 class DeckMatcher:
