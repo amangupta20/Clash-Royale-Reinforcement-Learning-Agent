@@ -1,15 +1,12 @@
 import json
-
-from template_matcher import DeckMatcher
-
+# Test the fast sequential version
+from template_matcher_fast import DeckMatcher
 import cv2 as cv
-
 import threading
 import time
 from capture import DoubleBuffer, capture_thread
 
 def __main__():
-
     # loading card deck from the json file
     deck_path = "deck.json"
     deck=[]
@@ -20,8 +17,6 @@ def __main__():
                 raise ValueError("Deck must contain exactly 8 cards.")
                 return 
             print(f"the cards in the current deck are {deck}")
-
-
 
     except FileNotFoundError:
         print(f"File not found: {deck_path}")
@@ -35,10 +30,10 @@ def __main__():
         print(f"Error: {e}")
         print("Exiting ...")
         return
+    
     stop_event = threading.Event()
     buffer = DoubleBuffer()
-    count = 0
-    tim = 0
+
     # Start the capture thread
     capture = threading.Thread(target=capture_thread, args=(buffer, stop_event))
     capture.start()
@@ -53,24 +48,22 @@ def __main__():
 
     # Initialize the DeckMatcher with the loaded deck
     deck_matcher = DeckMatcher(deck)
+    print("Testing FAST sequential template matching...")
+    
     try:
-        while not stop_event.is_set():
+        iteration = 0
+        while not stop_event.is_set() and iteration < 20:  # Test 20 iterations
             frame = buffer.read()
             if frame is not None:
-                count+=1
-                start = time.time()
                 detected_slots = deck_matcher.detect_slots(frame)
-                end = time.time()
-                tim += end-start
                 print(f"Detected slots: {detected_slots}")
-            time.sleep(1)
+                iteration += 1
+            time.sleep(2)  # Test every 2 seconds
     except KeyboardInterrupt:
         print("Stopping threads...")
-        print(f"average processing time: {tim/count:.4f} seconds")
         stop_event.set()
     
     capture.join()
     print("Threads stopped.")
-
 
 __main__()
