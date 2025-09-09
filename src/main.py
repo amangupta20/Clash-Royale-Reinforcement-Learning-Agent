@@ -1,63 +1,14 @@
 import json
-import sys
+
 from template_matcher import DeckMatcher
+
 import cv2 as cv
+
 import threading
 import time
 from capture import DoubleBuffer, capture_thread
 
-class SmartCachedDetector:
-    def __init__(self, deck_matcher):
-        self.deck_matcher = deck_matcher
-        self.last_result = None
-        self.last_detection_time = 0
-        self.cache_duration = 2.0  # Cache results for 2 seconds
-        self.result_history = []  # Track recent results for stability
-        self.stability_threshold = 3  # Need 3 consistent results before caching
-    
-    def detect_slots(self, frame):
-        current_time = time.time()
-        
-        # Check cache hit
-        if (self.last_result is not None and 
-            current_time - self.last_detection_time < self.cache_duration):
-            print(f"CACHE HIT: Using cached result ({current_time - self.last_detection_time:.1f}s old)")
-            return self.last_result
-        
-        # Perform new detection
-        result = self.deck_matcher.detect_slots(frame)
-        
-        # Update stability tracking
-        self.result_history.append(result)
-        if len(self.result_history) > self.stability_threshold:
-            self.result_history.pop(0)
-        
-        # Cache if stable
-        if (len(self.result_history) >= self.stability_threshold and 
-            all(r == result for r in self.result_history)):
-            self.last_result = result
-            self.last_detection_time = current_time
-            print(f"CACHED: Stable result {result}")
-        
-        return result
-
 def __main__():
-    # Check for caching mode argument
-    use_smart_caching = False
-    if len(sys.argv) > 1:
-        if sys.argv[1].lower() in ['cache', 'cached', 'smart']:
-            use_smart_caching = True
-            print("🚀 Using SMART CACHING mode for enhanced performance")
-        elif sys.argv[1].lower() in ['normal', 'original', 'no-cache']:
-            use_smart_caching = False
-            print("🔧 Using ORIGINAL mode (no caching)")
-        else:
-            print("Usage: python main.py [cache|normal]")
-            print("  cache  - Use smart caching for better performance")
-            print("  normal - Use original detection without caching")
-            return
-    else:
-        print("🔧 Using ORIGINAL mode (no caching) - use 'python main.py cache' for smart caching")
 
     # loading card deck from the json file
     deck_path = "deck.json"
@@ -100,24 +51,15 @@ def __main__():
             break
         time.sleep(0.5)
 
-    # Initialize the DeckMatcher
+    # Initialize the DeckMatcher with the loaded deck
     deck_matcher = DeckMatcher(deck)
-    
-    # Choose detection mode
-    if use_smart_caching:
-        detector = SmartCachedDetector(deck_matcher)
-        print("✅ Smart caching detector initialized")
-    else:
-        detector = deck_matcher
-        print("✅ Original detector initialized")
-        
     try:
         while not stop_event.is_set():
             frame = buffer.read()
             if frame is not None:
                 count+=1
                 start = time.time()
-                detected_slots = detector.detect_slots(frame)
+                detected_slots = deck_matcher.detect_slots(frame)
                 end = time.time()
                 tim += end-start
                 print(f"Detected slots: {detected_slots}")
