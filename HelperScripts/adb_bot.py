@@ -23,6 +23,8 @@ deploy_areas = [
 
 def adb_tap(x, y):
     subprocess.run(["adb", "shell", "input", "tap", str(x), str(y)])
+    # Add a small delay after each tap to ensure command is processed
+    time.sleep(0.1)
 
 
 def add_randomness(coord, offset=40):
@@ -31,10 +33,18 @@ def add_randomness(coord, offset=40):
     return (x + random.randint(-offset, offset), y + random.randint(-offset, offset))
 
 
+print("Starting deployment bot. Each deployment will select a card first.")
+
 while True:
-    # Pick a random card
-    card_x, card_y = random.choice(cards)
+    # Always select a card first for each deployment
+    card_index = random.randint(0, 3)  # Select card 0-3 (index for the cards list)
+    card_x, card_y = cards[card_index]
+    
+    # Tap on the card to select it
+    print(f"Selecting card at position {card_index+1}: ({card_x}, {card_y})")
     adb_tap(card_x, card_y)
+    
+    # Wait for selection animation to complete
     time.sleep(0.3)  # small delay between selecting and deploying
 
     # Weighted deployment choice (more bias to sides & middle-above)
@@ -44,7 +54,10 @@ while True:
 
     # Add randomness to deployment coordinates
     deploy_x, deploy_y = add_randomness(deploy_choice, offset=40)
+    print(f"Deploying to coordinates: ({deploy_x}, {deploy_y})")
     adb_tap(deploy_x, deploy_y)
 
-    # Wait 4–6 seconds before next deployment
-    time.sleep(random.uniform(3, 6))
+    # Wait before next deployment
+    wait_time = random.uniform(3, 6)
+    print(f"Waiting {wait_time:.2f} seconds before next deployment")
+    time.sleep(wait_time)
