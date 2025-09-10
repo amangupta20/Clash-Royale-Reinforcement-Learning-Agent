@@ -18,7 +18,6 @@ def __main__():
             deck = json.load(f)
             if not len(deck) == 8:
                 raise ValueError("Deck must contain exactly 8 cards.")
-                return 
             print(f"the cards in the current deck are {deck}")
 
 
