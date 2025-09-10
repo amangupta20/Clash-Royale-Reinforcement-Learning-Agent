@@ -1,5 +1,4 @@
 import cv2 as cv
-import cardslot
 import time
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
@@ -105,7 +104,7 @@ class DeckMatcher:
         print(f"  TOTAL: {total_time:.1f}ms")
         
         return detected_slots
-        return detected_slots
+
 
 def crop(frame):
     CROP_LEFT = 783
