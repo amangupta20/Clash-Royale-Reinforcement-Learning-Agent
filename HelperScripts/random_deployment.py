@@ -34,8 +34,7 @@ def adb_tap(x, y):
     """Execute an ADB tap at the specified coordinates using ADB SHELL.
     Works consistently across macOS, Windows, and Linux.
     """
-    tap_cmd = f"adb shell input tap {x} {y}"
-    subprocess.run(tap_cmd, shell=True)
+    subprocess.run(['adb', 'shell', 'input', 'tap', str(x), str(y)])
     time.sleep(0.1)
 
 def add_randomness(coord, offset=5):
