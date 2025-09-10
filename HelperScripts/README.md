@@ -98,3 +98,22 @@ adb> pm list packages
 ```
 
 Type `exit` or `quit` to leave the interactive session.
+
+### `adb_bot.py`
+
+Automates Clash Royale card deployment via ADB.
+
+- **Features:**
+  - Randomly selects cards from the deck (with slight tap randomness, as yet to integrate it with model).
+  - Deploys to predefined zones (left, right, middle, high-top) with ± offset.
+  - Human-like timing: 4–6s intervals, 0.2–0.5s card→deploy delay.
+  - Dynamic weights: deployment bias shifts over time.
+
+- **Requirements:**
+  - ADB installed (`adb devices` should list your device/emulator).
+  - Screen resolution ~1080x1920 (adjust coordinates if different).
+
+- **Usage:**
+  ```bash
+  python adb_bot.py
+
