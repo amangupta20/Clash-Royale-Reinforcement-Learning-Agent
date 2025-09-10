@@ -15,7 +15,7 @@ class DeckMatcher:
         cv.setNumThreads(1)  # Avoid oversubscription with ThreadPoolExecutor
         
         # Pre-allocate slot mapping ranges for faster slot detection
-        self.slot_ranges = [(0, 40), (40, 80), (80, 120), (120, 160)]
+        self.slot_ranges = [(0, 55), (55, 110), (110, 165), (165, 220)]
 
     def load_templates(self):
         templates = []
@@ -26,13 +26,13 @@ class DeckMatcher:
         return templates
     def _fast_which_slot(self, x):
         """Optimized slot detection without function call overhead"""
-        if x < 40:
+        if x < 55:
             return 1
-        elif x < 80:
+        elif x < 110:
             return 2
-        elif x < 120:
+        elif x < 165:
             return 3
-        elif x < 160:
+        elif x < 220:
             return 4
         return None
 
@@ -61,7 +61,6 @@ class DeckMatcher:
         # Dictionary to hold detected cards in slots
         detected_slots = {1: None, 2: None, 3: None, 4: None}
         threshold = 0.8
-        
         # Time template matching
         matching_start = time.perf_counter()
         futures = [
@@ -107,10 +106,10 @@ class DeckMatcher:
 
 
 def crop(frame):
-    CROP_LEFT = 783
-    CROP_RIGHT = 720
-    CROP_TOP=845
-    CROP_BOT=46
+    CROP_LEFT = 788
+    CROP_RIGHT = 675
+    CROP_TOP=893
+    CROP_BOT=50
     height, width = frame.shape[:2]
         # Validate crop coordinates
     if CROP_TOP >= height - CROP_BOT:
@@ -122,5 +121,5 @@ def crop(frame):
     
     cropped_image = frame[CROP_TOP:height-CROP_BOT, CROP_LEFT:width-CROP_RIGHT]
     
-
+    cv.imwrite("cropped.png", cropped_image)
     return cropped_image
