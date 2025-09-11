@@ -3,21 +3,37 @@ import time
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
+
 class DeckMatcher:
+    """
+    A class for detecting cards in a player's hand using template matching.
+    It is optimized for speed by using a thread pool to perform template matching in parallel.
+    """
     def __init__(self, deck=None):
         if deck is None:
-            raise ValueError("Deck is required")
+            raise ValueError("A deck of cards is required to initialize the DeckMatcher.")
         self.deck = deck
         self.templates = self.load_templates()
-        self.executor = ThreadPoolExecutor(max_workers=8)  # Match deck size
-        # Optimize OpenCV for speed
+
+        # A thread pool is used to run the template matching for each card in parallel.
+        # The number of workers is set to the number of cards in the deck for optimal performance.
+        self.executor = ThreadPoolExecutor(max_workers=len(self.deck))
+
+        # Optimize OpenCV for speed by enabling optimizations and setting the number of threads to 1.
+        # This is done to avoid oversubscription, as we are already using a thread pool.
         cv.setUseOptimized(True)
-        cv.setNumThreads(1)  # Avoid oversubscription with ThreadPoolExecutor
+        cv.setNumThreads(1)
         
-        # Pre-allocate slot mapping ranges for faster slot detection
+        # Pre-allocate slot mapping ranges for faster slot detection.
+        # These ranges correspond to the x-coordinates of the four card slots.
         self.slot_ranges = [(0, 55), (55, 110), (110, 165), (165, 220)]
 
     def load_templates(self):
+        """
+        Loads the card templates from the assets folder.
+        The templates are loaded as grayscale images and resized to half their original size
+        for faster template matching.
+        """
         templates = []
         for card in self.deck:
             template = cv.imread(f"assets/cards/{card}.png", cv.IMREAD_REDUCED_GRAYSCALE_2)
@@ -25,7 +41,10 @@ class DeckMatcher:
                 templates.append((card, template))
         return templates
     def _fast_which_slot(self, x):
-        """Optimized slot detection without function call overhead"""
+        """
+        Determines which card slot a detected card belongs to based on its x-coordinate.
+        This is an optimized version that avoids the overhead of a function call.
+        """
         if x < 55:
             return 1
         elif x < 110:
@@ -37,11 +56,17 @@ class DeckMatcher:
         return None
 
     def _match_single_template(self, game_image, card_template_pair):
-        """Single template matching for parallel execution"""
+        """
+        Performs template matching for a single card.
+        This function is designed to be executed in parallel by the thread pool.
+        """
         card_name, template = card_template_pair
+        # Use normalized cross-correlation for template matching
         result = cv.matchTemplate(game_image, template, cv.TM_CCOEFF_NORMED)
+        # Find the location with the highest correlation
         _, max_val, _, max_loc = cv.minMaxLoc(result)
-        return card_name, max_val, max_loc[0]  # Only return x coordinate
+        # Return the card name, the maximum correlation value, and the x-coordinate of the match
+        return card_name, max_val, max_loc[0]
 
     def detect_slots(self, hand_roi):
         """
@@ -58,41 +83,47 @@ class DeckMatcher:
         # Time preprocessing
         preprocess_start = time.perf_counter()
         
-        # No need to crop - we already have the ROI!
+        # If the hand ROI is not valid, return an empty dictionary
         if hand_roi is None:
             return dict((i, None) for i in range(1, 5))
             
-        # Convert to grayscale and resize in one go
+        # Preprocess the hand ROI for template matching.
+        # Convert the image to grayscale and resize it to half its original size.
         gray = cv.cvtColor(hand_roi, cv.COLOR_BGR2GRAY)
         game_image = cv.resize(gray, (gray.shape[1] // 2, gray.shape[0] // 2), interpolation=cv.INTER_AREA)
         preprocess_end = time.perf_counter()
         preprocess_time = (preprocess_end - preprocess_start) * 1000
             
-        # Dictionary to hold detected cards in slots
+        # This dictionary will store the detected card for each slot.
         detected_slots = {1: None, 2: None, 3: None, 4: None}
+        # The threshold for a successful match.
         threshold = 0.9
-        # Time template matching
+
+        # Submit the template matching tasks to the thread pool.
         matching_start = time.perf_counter()
         futures = [
             self.executor.submit(self._match_single_template, game_image, card_template)
             for card_template in self.templates
         ]
         
-        # Time result collection
+        # Collect the results from the thread pool.
         collection_start = time.perf_counter()
         candidates = []
         for future in futures:
             card_name, max_val, x_coord = future.result()
+            # If the correlation is above the threshold, consider it a potential match.
             if max_val >= threshold:
                 slot = self._fast_which_slot(x_coord)
                 if slot is not None:
                     candidates.append((slot, card_name, max_val))
         collection_end = time.perf_counter()
         
-        # Time slot assignment
+        # Assign the best match to each slot.
+        # The candidates are sorted by confidence (max_val) in descending order.
         assignment_start = time.perf_counter()
         candidates.sort(key=lambda x: x[2], reverse=True)
         for slot, card_name, confidence in candidates:
+            # If the slot has not been assigned a card yet, assign the current card to it.
             if detected_slots[slot] is None:
                 detected_slots[slot] = card_name
         assignment_end = time.perf_counter()
