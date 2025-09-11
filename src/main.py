@@ -1,12 +1,39 @@
 import json
 
 from template_matcher import DeckMatcher
+from capture import DoubleBuffer, capture_thread, create_frame_roi
 
 import cv2 as cv
+import numpy as np
 
 import threading
 import time
-from capture import DoubleBuffer, capture_thread
+
+def extract_hand_roi(frame: np.ndarray) -> np.ndarray:
+    """
+    Extract hand region using ROI instead of crop function.
+    Converts your 4-side crop values to ROI coordinates.
+    """
+    # Your current crop values
+    CROP_LEFT = 788
+    CROP_RIGHT = 675
+    CROP_TOP = 893
+    CROP_BOT = 50
+    
+    height, width = frame.shape[:2]
+    
+    # Validate coordinates (same as your current validation)
+    if CROP_TOP >= height - CROP_BOT or CROP_LEFT >= width - CROP_RIGHT:
+        return None
+    
+    # Convert to ROI parameters
+    x = CROP_LEFT
+    y = CROP_TOP
+    roi_width = width - CROP_LEFT - CROP_RIGHT   # 1920 - 788 - 675 = 457
+    roi_height = height - CROP_TOP - CROP_BOT    # 1080 - 893 - 50 = 137
+    
+    # Extract ROI (zero-copy view)
+    return create_frame_roi(frame, x, y, roi_width, roi_height)
 
 def __main__():
 
@@ -54,15 +81,35 @@ def __main__():
     deck_matcher = DeckMatcher(deck)
     try:
         while not stop_event.is_set():
-            frame = buffer.read()
+            # Use the optimized read_copy method for safe processing
+            frame = buffer.read_copy()
             if frame is not None:
-                count+=1
-                start = time.time()
-                detected_slots = deck_matcher.detect_slots(frame)
-                end = time.time()
-                tim += end-start
-                print(f"Detected slots: {detected_slots}")
-            time.sleep(1)
+                # Extract hand ROI using zero-copy operation (replaces crop)
+                hand_roi = extract_hand_roi(frame)
+                
+                if hand_roi is not None:
+                    
+                    
+                    # Get frame info for debugging
+                    if count == 0:
+                        frame_info = buffer.get_frame_info()
+                        print(f"Frame info: {frame_info}")
+                        print(f"Hand ROI shape: {hand_roi.shape}")
+                        print(f"ROI shares memory: {np.shares_memory(frame, hand_roi)}")
+                
+                    count += 1
+                    start = time.time()
+                    
+                    # Pass ROI directly to matcher (Option 2 approach)
+                    detected_slots = deck_matcher.detect_slots(hand_roi)
+                    
+                    end = time.time()
+                    tim += end - start
+                    print(f"Detected slots: {detected_slots}")
+                else:
+                    print("Invalid crop coordinates for current frame")
+                    
+            time.sleep(0.3)
     except KeyboardInterrupt:
         print("Stopping threads...")
         print(f"average processing time: {tim/count:.4f} seconds")
