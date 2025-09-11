@@ -102,12 +102,13 @@ def capture_thread(buffer: DoubleBuffer, stop_event: threading.Event):
         frame_array = frame.frame_buffer
         
         # Efficient NumPy slicing for BGRA to BGR conversion (zero-copy view)
-        if frame_array.shape[2] == 4:  # BGRA format
+        if frame_array.ndim >= 3 and frame_array.shape[2] == 4:  # BGRA format
             # Use numpy view instead of copy for better performance
             frame_bgr = frame_array[:, :, :3]  # Remove alpha channel (creates a view, not copy)
             # Ensure contiguous memory layout for OpenCV (only copies if needed)
             frame_bgr = np.ascontiguousarray(frame_bgr, dtype=np.uint8)
         else:
+            # If frame_array is not 3D or does not have 4 channels, use as-is
             frame_bgr = frame_array
             
         buffer.write(frame_bgr)
