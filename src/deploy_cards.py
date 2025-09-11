@@ -8,13 +8,22 @@ from random_deployment import (
     update_weights
 )
 
+# This file provides high-level functions for different card deployment strategies.
+# It uses the low-level functions from random_deployment.py to perform the actual deployments.
+
 def run_continuous_deployment(interval_range=(4, 6), num_deployments=None):
     """
-    Run continuous deployment with random intervals.
+    Runs a continuous deployment of cards at random intervals.
+
+    This function will continuously deploy cards until the specified number of deployments
+    is reached, or indefinitely if no number is specified. It can be stopped manually
+    with a KeyboardInterrupt (Ctrl+C).
     
     Args:
-        interval_range (tuple): Range for random interval (min, max) in seconds.
-        num_deployments (int, optional): Number of deployments to make. If None, runs indefinitely.
+        interval_range (tuple): A tuple containing the minimum and maximum interval
+                                between deployments, in seconds.
+        num_deployments (int, optional): The total number of cards to deploy.
+                                         If None, the deployment will run indefinitely.
     """
     weights = get_deploy_weights()
     count = 0
@@ -47,13 +56,16 @@ def run_continuous_deployment(interval_range=(4, 6), num_deployments=None):
 
 def deploy_specific_strategy(strategy):
     """
-    Deploy cards according to a predefined strategy.
+    Deploys cards according to a predefined strategy.
+
+    The strategy is defined as a list of tuples, where each tuple contains
+    the card slot and the deployment position.
     
     Args:
-        strategy (list): List of tuples (card_slot, deploy_position) to deploy in order.
+        strategy (list): A list of (card_slot, deploy_position) tuples.
     
     Returns:
-        bool: True if all deployments were successful, False otherwise.
+        True if the strategy was deployed successfully, False otherwise.
     """
     weights = get_deploy_weights()
     
@@ -63,14 +75,14 @@ def deploy_specific_strategy(strategy):
         for i, (card, position) in enumerate(strategy):
             print(f"Strategy step {i+1}/{len(strategy)}: Deploying card {card} to position {position}")
             
-            # Deploy with exact specifications
+            # Deploy the card to the specified position
             used_card, used_position, weights = deploy_card(
                 card_slot=card, 
                 deploy_position=position, 
                 weights=weights
             )
             
-            # Wait a random amount before next deployment
+            # Wait for a short interval before the next deployment
             if i < len(strategy) - 1:
                 wait_time = random.uniform(1, 2)
                 print(f"Waiting {wait_time:.2f} seconds before next strategic deployment")
@@ -85,15 +97,15 @@ def deploy_specific_strategy(strategy):
 
 def deploy_multiple_cards(num_cards=1, positions=None):
     """
-    Deploy multiple cards to specified or random positions.
+    Deploys a specified number of cards to either specified or random positions.
     
     Args:
-        num_cards (int): Number of cards to deploy.
-        positions (list, optional): List of position numbers to deploy to.
-                                   If None, positions are chosen randomly.
+        num_cards (int): The number of cards to deploy.
+        positions (list, optional): A list of deployment positions to use. If not specified,
+                                   cards will be deployed to random positions.
     
     Returns:
-        list: List of (card, position) tuples that were deployed.
+        A list of (card_slot, deploy_position) tuples for each deployment.
     """
     weights = get_deploy_weights()
     deployments = []
