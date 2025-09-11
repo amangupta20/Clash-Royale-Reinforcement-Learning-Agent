@@ -88,7 +88,7 @@ def __main__():
                 hand_roi = extract_hand_roi(frame)
                 
                 if hand_roi is not None:
-                    # Save ROI for debugging (same output as before)
+                    
                     
                     # Get frame info for debugging
                     if count == 0:
