@@ -43,24 +43,34 @@ class DeckMatcher:
         _, max_val, _, max_loc = cv.minMaxLoc(result)
         return card_name, max_val, max_loc[0]  # Only return x coordinate
 
-    def detect_slots(self, frame):
+    def detect_slots(self, hand_roi):
+        """
+        Detect cards in the hand ROI.
+        
+        Args:
+            hand_roi: Pre-extracted hand region (BGR format, uint8, contiguous)
+            
+        Returns:
+            Dictionary mapping slot numbers to detected card names
+        """
         overall_start = time.perf_counter()
         
         # Time preprocessing
         preprocess_start = time.perf_counter()
-        cropped = crop(frame)
-        if cropped is None:
+        
+        # No need to crop - we already have the ROI!
+        if hand_roi is None:
             return dict((i, None) for i in range(1, 5))
             
         # Convert to grayscale and resize in one go
-        gray = cv.cvtColor(cropped, cv.COLOR_BGR2GRAY)
+        gray = cv.cvtColor(hand_roi, cv.COLOR_BGR2GRAY)
         game_image = cv.resize(gray, (gray.shape[1] // 2, gray.shape[0] // 2), interpolation=cv.INTER_AREA)
         preprocess_end = time.perf_counter()
         preprocess_time = (preprocess_end - preprocess_start) * 1000
             
         # Dictionary to hold detected cards in slots
         detected_slots = {1: None, 2: None, 3: None, 4: None}
-        threshold = 0.8
+        threshold = 0.9
         # Time template matching
         matching_start = time.perf_counter()
         futures = [
@@ -104,22 +114,4 @@ class DeckMatcher:
         
         return detected_slots
 
-
-def crop(frame):
-    CROP_LEFT = 788
-    CROP_RIGHT = 675
-    CROP_TOP=893
-    CROP_BOT=50
-    height, width = frame.shape[:2]
-        # Validate crop coordinates
-    if CROP_TOP >= height - CROP_BOT:
-        print(f"Error: Invalid vertical crop range. CROP_TOP({CROP_TOP}) >= height-CROP_BOT({height-CROP_BOT})")
-        return None
-    if CROP_LEFT >= width - CROP_RIGHT:
-        print(f"Error: Invalid horizontal crop range. CROP_LEFT({CROP_LEFT}) >= width-CROP_RIGHT({width-CROP_RIGHT})")
-        return None
-    
-    cropped_image = frame[CROP_TOP:height-CROP_BOT, CROP_LEFT:width-CROP_RIGHT]
-    
-    cv.imwrite("cropped.png", cropped_image)
-    return cropped_image
+# crop() function removed - now handled by ROI extraction in main.py
