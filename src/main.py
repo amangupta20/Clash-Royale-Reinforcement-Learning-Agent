@@ -3,6 +3,7 @@ import json
 from template_matcher import DeckMatcher
 
 import cv2 as cv
+import numpy as np
 
 import threading
 import time
@@ -54,15 +55,27 @@ def __main__():
     deck_matcher = DeckMatcher(deck)
     try:
         while not stop_event.is_set():
-            frame = buffer.read()
+            # Use the optimized read_copy method for safe processing
+            frame = buffer.read_copy()
             if frame is not None:
-                count+=1
+                # Save frame (NumPy array is directly compatible with cv.imwrite)
+                cv.imwrite("captured_frame.png", frame)
+                
+                # Get frame info for debugging
+                frame_info = buffer.get_frame_info()
+                if count == 0:  # Print info only for first frame
+                    print(f"Frame info: {frame_info}")
+                
+                count += 1
                 start = time.time()
+                
+                # Process with optimized NumPy array
                 detected_slots = deck_matcher.detect_slots(frame)
+                
                 end = time.time()
-                tim += end-start
+                tim += end - start
                 print(f"Detected slots: {detected_slots}")
-            time.sleep(1)
+            time.sleep(10)
     except KeyboardInterrupt:
         print("Stopping threads...")
         print(f"average processing time: {tim/count:.4f} seconds")
