@@ -62,14 +62,61 @@ GAME_STATE_IMAGE_PATH=path/to/state.png
 3. Introduce structured logging & error handling wrappers.
 4. Draft minimal `ClashRoyaleEnv` scaffold (reset/step placeholders) once pipeline stable.
 
+## OCR Performance Optimization
+
+The agent uses **PaddleOCR 2.7.3 with ONNX Runtime** for high-speed digit extraction from elixir and tower health regions.
+
+### Performance Benchmarks
+
+- **Original PaddleOCR 3.x**: ~800ms total (150ms elixir + 650ms towers)
+- **PaddleOCR 2.7.3 Standard**: ~437ms total (62.51ms × 7 calls)
+- **ONNX Runtime Sequential**: ~301ms total (43.01ms × 7 calls)
+- **ONNX Runtime Parallel (7 workers)**: **~91ms total** ⚡ (3.84x speedup)
+
+**Total speedup: 8.8x faster than original (800ms → 91ms)**
+
+### ONNX Model Setup
+
+Run the setup script to download and convert PaddleOCR models to ONNX format:
+
+```powershell
+.\setup_paddleocr2_onnx.ps1
+```
+
+This script will:
+
+1. Download PP-OCRv3 detection, PP-OCRv4 recognition, and v2.0 classification models
+2. Extract and convert them to ONNX format using paddle2onnx
+3. Save to `inference/det_onnx/`, `inference/rec_onnx/`, and `inference/cls_onnx/`
+
+**Requirements:**
+
+- PaddleOCR 2.7.3 (not 3.x)
+- NumPy 1.26.4 (for imgaug compatibility)
+- paddle2onnx 2.0.2rc3 (install via `paddlex --install paddle2onnx`)
+
+### Architecture Details
+
+The OCR system processes 7 ROIs in parallel:
+
+- **1 Elixir counter**: Single digit (0-10)
+- **6 Tower health displays**: 3-4 digits (friendly + enemy king/princess towers)
+
+Uses ThreadPoolExecutor with 7 workers for parallel ONNX inference, achieving near-linear speedup due to ONNX Runtime's thread-safe C++ implementation.
+
 ## Installing & Running (Tooling Phase)
 
-```
+```powershell
 python -m venv .venv
-./.venv/Scripts/activate  # Windows PowerShell
-pip install -r HelperScripts/requirements.txt
+.\.venv\Scripts\activate  # Windows PowerShell
+pip install -r requirements.txt
 cp HelperScripts/.env.example .env
 # Edit .env with correct window name & paths
+
+# Set up ONNX models for fast OCR
+.\setup_paddleocr2_onnx.ps1
+
+# Test helper scripts
 python HelperScripts/windows-capture-testing.py
 python HelperScripts/windows-capture-with\ required\ resolution.py
 python HelperScripts/py_adb.py

@@ -12,3 +12,11 @@ context_portal
 HelperScripts/.env
 .vscode
 .github
+.kiloignore
+.rooignore
+.kilocode
+.specify
+specs
+inference/
+inference/*_onnx/
+debug_ocr_*
