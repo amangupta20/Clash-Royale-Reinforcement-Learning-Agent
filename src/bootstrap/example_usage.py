@@ -15,6 +15,7 @@ import numpy as np
 from capture import DoubleBuffer, capture_thread
 from template_matcher import TemplateCardMatcher
 from minimal_perception import MinimalPerception
+from state_builder import MinimalStateBuilder, StateVector
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -37,6 +38,7 @@ def main():
     stop_event = threading.Event()
     card_matcher = TemplateCardMatcher(deck)
     perception = MinimalPerception(save_debug_images=False)
+    state_builder = MinimalStateBuilder(deck)
     
     # Start screen capture in a separate thread
     capture = threading.Thread(target=capture_thread, args=(buffer, stop_event))
@@ -47,6 +49,8 @@ def main():
     while not stop_event.is_set():
         if buffer.read() is not None:
             print("First frame received!")
+            # Start match timer when first frame is received
+            perception.start_match_timer()
             break
         time.sleep(0.5)
     
@@ -69,15 +73,21 @@ def main():
             with ThreadPoolExecutor(max_workers=3) as executor:
                 # Submit detection tasks
                 cards_future = executor.submit(card_matcher.detect_hand_cards, frame)
-                elixir_future = executor.submit(perception.detect_elixir, frame)
-                towers_future = executor.submit(perception.detect_tower_health, frame)
+                perception_future = executor.submit(perception.detect_all_perceptions, frame)
                 
                 # Collect results
                 detected_cards = cards_future.result()
-                elixir_count = elixir_future.result()
-                tower_health = towers_future.result()
-                tower_health_pct = perception.get_tower_health_percentages(tower_health)
-            
+                elixir_count, tower_health, game_time = perception_future.result()
+                
+                # Build state vector
+                state_vector = state_builder.build_state(
+                    frame=frame,
+                    detected_cards=detected_cards,
+                    elixir_count=elixir_count,
+                    tower_health=tower_health,
+                    match_time=game_time
+                )
+           
             # Calculate processing time
             processing_time = (time.perf_counter() - start_time) * 1000
             frame_count += 1
@@ -88,9 +98,19 @@ def main():
                 print(f"\n--- Frame {frame_count} ---")
                 print(f"Processing time: {processing_time:.2f}ms (avg: {total_time/frame_count:.2f}ms)")
                 print(f"Elixir: {elixir_count}/10")
+                print(f"Game time: {game_time:.1f}s")
                 print(f"Hand cards: {detected_cards}")
-                print(f"Friendly towers: {tower_health_pct['friendly']}")
-                print(f"Enemy towers: {tower_health_pct['enemy']}")
+                print(f"Friendly towers: {tower_health['friendly']}")
+                print(f"Enemy towers: {tower_health['enemy']}")
+                
+                # Print state vector summary
+                global_features = state_vector.get_global_features()
+                hand_features = state_vector.get_hand_features()
+                game_time_features = state_vector.get_game_time_features()
+                
+                print(f"State vector shape: {state_vector.vector.shape}")
+                print(f"Global features: elixir={global_features[0]:.2f}, match_time={global_features[2]:.2f}")
+                print(f"Game time features: double_elixir={game_time_features[0]:.2f}, until_overtime={game_time_features[1]:.2f}")
             
             # Small delay to prevent excessive CPU usage
             time.sleep(0.03)

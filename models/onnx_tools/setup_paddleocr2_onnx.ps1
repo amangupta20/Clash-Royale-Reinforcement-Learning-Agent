@@ -6,7 +6,9 @@ Write-Host "=" * 70
 Write-Host "PaddleOCR 2.x ONNX Model Setup (All 3 Models)"
 Write-Host "=" * 70
 
-$projectRoot = (Resolve-Path "..\..\" ).ProviderPath
+# Get the absolute path to the project root by resolving from the script's location
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = (Resolve-Path (Join-Path $scriptDir "..\..")).ProviderPath
 $inferenceDir = Join-Path $projectRoot "inference"
 
 # Create directories
@@ -17,6 +19,8 @@ New-Item -ItemType Directory -Path (Join-Path $inferenceDir "rec_onnx") -Force |
 New-Item -ItemType Directory -Path (Join-Path $inferenceDir "cls_onnx") -Force | Out-Null
 
 Set-Location $projectRoot
+Write-Host "Project root: $projectRoot"
+Write-Host "Inference directory: $inferenceDir"
 
 # URLs for model downloads
 $detUrl = "https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar"
@@ -126,7 +130,7 @@ Write-Host "`n" + "-" * 70
 Write-Host "Step 4: Converting Detection Model to ONNX"
 Write-Host "-" * 70
 
-& .\.venv\Scripts\paddle2onnx.exe `
+& (Join-Path $projectRoot ".venv\Scripts\paddle2onnx.exe") `
     --model_dir (Join-Path $inferenceDir "en_PP-OCRv3_det_infer") `
     --model_filename inference.pdmodel `
     --params_filename inference.pdiparams `
@@ -146,7 +150,7 @@ Write-Host "`n" + "-" * 70
 Write-Host "Step 5: Converting Recognition Model to ONNX"
 Write-Host "-" * 70
 
-& .\.venv\Scripts\paddle2onnx.exe `
+& (Join-Path $projectRoot ".venv\Scripts\paddle2onnx.exe") `
     --model_dir (Join-Path $inferenceDir "en_PP-OCRv4_rec_infer") `
     --model_filename inference.pdmodel `
     --params_filename inference.pdiparams `
@@ -166,7 +170,7 @@ Write-Host "`n" + "-" * 70
 Write-Host "Step 6: Converting Classification Model to ONNX"
 Write-Host "-" * 70
 
-& .\.venv\Scripts\paddle2onnx.exe `
+& (Join-Path $projectRoot ".venv\Scripts\paddle2onnx.exe") `
     --model_dir (Join-Path $inferenceDir "ch_ppocr_mobile_v2.0_cls_infer") `
     --model_filename inference.pdmodel `
     --params_filename inference.pdiparams `
