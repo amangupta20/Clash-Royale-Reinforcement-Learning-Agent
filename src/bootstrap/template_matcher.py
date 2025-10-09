@@ -32,6 +32,9 @@ class TemplateCardMatcher:
     CROP_TOP = 893
     CROP_BOT = 50
     
+    # Full hand ROI for extraction
+    HAND_ROI = (CROP_LEFT, CROP_TOP, CROP_RIGHT, CROP_BOT)
+    
     # Card slot x-coordinate ranges (scaled to hand ROI)
     SLOT_RANGES = [
         (0, 55),    # Slot 1

@@ -42,7 +42,6 @@ class MinimalPerception:
         (941, 17, 57, 20),    # enemy king 941 17, 941 37,997 17, 998 37
     ]
     
-    
     def __init__(self, save_debug_images: bool = False):
         """Initialize the minimal perception components."""
 
@@ -59,6 +58,10 @@ class MinimalPerception:
         # 7 workers optimal for processing 6 towers + 1 elixir in parallel
         # ONNX Runtime is thread-safe, no locking needed
         self._ocr_executor = ThreadPoolExecutor(max_workers=7, thread_name_prefix="onnx_ocr")
+        
+        # Game time tracking
+        self._match_start_time = None
+        self._is_in_match = False
 
     def _initialize_ocr_reader(self):
         """Create a PaddleOCR 2.7.3 instance with ONNX Runtime for optimal performance.
@@ -467,8 +470,5 @@ class MinimalPerception:
             print(f"Tower health OCR error for {tower_name}: {e}")
             import traceback
             traceback.print_exc()
-        
         # If OCR fails, return 0 (tower destroyed or not visible)
         return 0
-    
-    
