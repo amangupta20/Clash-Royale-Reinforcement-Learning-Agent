@@ -16,6 +16,7 @@ HelperScripts/.env
 .rooignore
 .kilocode
 .specify
+.claude
 specs
 inference/
 inference/*_onnx/
