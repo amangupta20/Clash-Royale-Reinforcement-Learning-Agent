@@ -140,7 +140,9 @@ class TemplateCardMatcher:
         overall_start = time.perf_counter()
         
         # Extract hand ROI
-        x, y, width, height = self.HAND_ROI
+        x, y, right, bottom = self.HAND_ROI
+        width = 1920 - x - right  # Calculate width from coordinates
+        height = 1080 - y - bottom  # Calculate height from coordinates
         hand_roi = frame[y:y+height, x:x+width]
         
         # Initialize results dictionary

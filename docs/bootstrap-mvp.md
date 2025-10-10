@@ -4,7 +4,7 @@ This document describes the Phase 0 Bootstrap implementation for the Clash Royal
 
 ## Overview
 
-Phase 0 implements a fast MVP for initial showcase and environment validation. It uses minimal perception components (template matching + OCR) and a simplified state representation (~50 dimensions) to achieve the target 30-40% win rate vs easy AI with <500ms P95 action loop latency.
+Phase 0 implements a fast MVP for initial showcase and environment validation. It uses minimal perception components (template matching + OCR) and a simplified state representation (~53 dimensions) to achieve the target 30-40% win rate vs easy AI with <500ms P95 action loop latency.
 
 ## Architecture
 
@@ -23,22 +23,22 @@ Screen Capture → Template Matching → MinimalPerception → StateBuilder → 
 1. **BootstrapCapture** captures frames from BlueStacks window (~50ms latency)
 2. **TemplateCardMatcher** detects hand cards using OpenCV template matching (~4ms)
 3. **MinimalPerception** extracts elixir, tower health, and game time using PaddleOCR with ONNX Runtime (~90ms)
-4. **MinimalStateBuilder** aggregates all outputs into ~50-dimensional state vector (~10ms)
+4. **MinimalStateBuilder** aggregates all outputs into ~53-dimensional state vector (~10ms)
 5. **StateVector** represents the complete game state for the RL agent
 
 ## State Representation
 
-The Phase 0 state representation is a simplified version of the full 513-dim state vector that will be implemented in Phase 1. It contains 50 normalized features organized into three groups:
+The Phase 0 state representation is a simplified version of the full 513-dim state vector that will be implemented in Phase 1. It contains 53 normalized features organized into three groups:
 
 ### Global Features (13 dimensions)
 
 | Index | Feature          | Range      | Description                                                |
 | ----- | ---------------- | ---------- | ---------------------------------------------------------- |
-| 0     | Player Elixir    | [0.0, 1.0] | Current elixir count normalized to [0-10]                  |
+| 0     | Player Elixir    | [0, 10]    | Current elixir count                                       |
 | 1     | Opponent Elixir  | -1.0       | Placeholder for opponent elixir (not available in Phase 0) |
-| 2     | Match Time       | [0.0, 1.0] | Current match time normalized to [0-300s]                  |
+| 2     | Match Time       | [0, ∞)     | Current match time in seconds                              |
 | 3-8   | Tower Health     | Variable   | 6 tower health values (as-is, not normalized)              |
-| 9-12  | Phase Indicators | [0.0, 1.0] | One-hot encoded game phase (early/mid/late/overtime)       |
+| 9-12  | Phase Indicators | [0.0, 1.0] | One-hot encoded game phase (early/mid/late)                |
 
 **Tower Health Order (indices 3-8):**
 
@@ -52,58 +52,63 @@ The Phase 0 state representation is a simplified version of the full 513-dim sta
 **Phase Indicators (indices 9-12):**
 
 - Early game (0-120s): [1.0, 0.0, 0.0, 0.0]
-- Mid game (120-240s): [0.0, 1.0, 0.0, 0.0]
-- Late game (240-300s): [0.0, 0.0, 1.0, 0.0]
-- Overtime (300s+): [0.0, 0.0, 0.0, 1.0]
+- Mid game (120-180s): [0.0, 1.0, 0.0, 0.0]
+- Late game (180-240s): [0.0, 0.0, 1.0, 0.0]
+- Overtime (180s+): [0.0, 0.0, 0.0, 1.0]
 
-### Hand Features (32 dimensions)
+### Hand Features (40 dimensions)
 
-For each of the 4 visible cards (8 dimensions per card):
+For each of the 4 visible cards (10 dimensions per card):
 
-- Card ID (one-hot encoded for 8 cards in deck)
-- Affordability (can afford with current elixir)
-- Attributes (from attribute.txt)
+- Card ID (normalized to [0-1] for 8 cards in deck)
+- Card Attributes (8 binary attributes)
+- Elixir Cost (as-is, not normalized)
 
 **Card Slot Mapping:**
 
-- Slot 1: indices 13-20
-- Slot 2: indices 21-28
-- Slot 3: indices 29-36
-- Slot 4: indices 37-44
+- Slot 1: indices 13-22
+- Slot 2: indices 23-32
+- Slot 3: indices 33-42
+- Slot 4: indices 43-52
 
-**Card One-Hot Encoding (8 dimensions):**
-Each card in the deck is assigned a unique index in the one-hot vector:
+**Card ID Encoding (1 dimension):**
+Each card in the deck is assigned a unique integer value (1-8):
 
-- Index 0: archers
-- Index 1: giant
-- Index 2: knight
-- Index 3: mini_pekka
-- Index 4: goblin_hut
-- Index 5: minions
-- Index 6: musketeer
-- Index 7: valkyrie
+- archers: 1
+- giant: 2
+- knight: 3
+- mini_pekka: 4
+- goblin_hut: 5
+- minions: 6
+- musketeer: 7
+- valkyrie: 8
 
-### Game Time Features (5 dimensions)
+**Card Attributes (8 dimensions):**
+Binary attributes for each card:
 
-| Index | Feature                    | Range      | Description                                                     |
-| ----- | -------------------------- | ---------- | --------------------------------------------------------------- |
-| 45    | Time in Double-Elixir      | [0.0, 1.0] | Time since double-elixir started (120s), normalized to [0-180s] |
-| 46    | Time Until Overtime        | [0.0, 1.0] | Time until overtime (180s), normalized to [0-180s]              |
-| 47    | Elixir Regeneration Rate   | [0.0, 1.0] | Fixed rate (1 elixir per 2.8s), normalized to [0-1/s]           |
-| 48    | Time Since Last Card Play  | 0.0        | Placeholder for Phase 0 (requires card play tracking)           |
-| 49    | Average Time Between Plays | 5.0        | Placeholder for Phase 0 (5 seconds average)                     |
+- is_air: Can target air units
+- attack_air: Can attack air units
+- is_wincondition: Is a win condition card
+- is_tank: High health unit
+- is_swarm: Multiple unit card
+- is_spell: Spell card
+- is_aoe: Area of effect card
+- is_building: Building card
+
+**Elixir Cost (1 dimension):**
+The elixir cost to play the card (0-10).
 
 ## Perception Components
 
-### Template Matching (T005)
+### Template Matching
 
 **Implementation:** `TemplateCardMatcher` in `src/bootstrap/template_matcher.py`
 
 - **Method:** OpenCV template matching with normalized cross-correlation (TM_CCOEFF_NORMED)
 - **Input:** Hand ROI (788, 893, 675, 50)
 - **Output:** Dictionary mapping slot numbers to detection results
-- **Threshold:** 0.7 confidence for positive detection
-- **Performance:** <4ms for all 4 card matches, >80% accuracy
+- **Threshold:** 0.9 confidence for positive detection
+- **Performance:** <4ms for all 4 card matches, >90% accuracy
 
 **Card Slot Ranges (in hand ROI coordinates):**
 
@@ -112,7 +117,7 @@ Each card in the deck is assigned a unique index in the one-hot vector:
 - Slot 3: (110, 165)
 - Slot 4: (165, 220)
 
-### OCR Perception (T006, T007)
+### OCR Perception
 
 **Implementation:** `MinimalPerception` in `src/bootstrap/minimal_perception.py`
 
@@ -146,12 +151,43 @@ Each card in the deck is assigned a unique index in the one-hot vector:
 - **Implementation:** High-precision timer started when match begins
 - **Performance:** ~0ms (just reading a timer value)
 
-## State Builder (T008)
+## Gymnasium Environment Wrapper
+
+**Implementation:** `BootstrapClashRoyaleEnv` in `src/bootstrap/bootstrap_env.py`
+
+- **Framework:** Gymnasium API compatibility for RL training
+- **Action Space:** MultiDiscrete([4, 32, 18]) for card_slot, grid_x, grid_y
+- **Observation Space:** Box(low=-1, high=1, shape=(53,), dtype=np.float32)
+- **Environment Flow:** reset() → step(action) → close()
+
+### Key Methods
+
+```python
+class BootstrapClashRoyaleEnv(gym.Env):
+    def reset(self) -> Tuple[np.ndarray, Dict]:    # Navigate to battle, wait for start, return initial state
+    def step(self, action) -> Tuple[np.ndarray, float, bool, bool, Dict]  # Execute action, wait, capture, build state, compute reward
+    def close(self) -> None                            # Clean up resources
+```
+
+### Reward Function
+
+- **Win:** +1.0
+- **Loss:** -1.0
+- **Enemy Tower Damage:** +0.1 per 100 HP
+- **Friendly Tower Damage:** -0.1 per 100 HP
+
+### Performance Targets
+
+- Step execution: <500ms P95
+- Frame capture: <50ms average
+- State building: <10ms
+
+## State Builder
 
 **Implementation:** `MinimalStateBuilder` in `src/bootstrap/state_builder.py`
 
 - **Input:** Frame, detected cards, elixir count, tower health, match time
-- **Output:** `StateVector` object with 50-dimensional feature vector
+- **Output:** `StateVector` object with 53-dimensional feature vector
 - **Validation:** All values normalized to [0, 1] or [-1, 1], no NaN values
 - **Performance:** <10ms processing time
 
@@ -162,13 +198,12 @@ The `StateVector` class represents the state with validation and convenience met
 ```python
 @dataclass
 class StateVector:
-    vector: np.ndarray          # Shape: (50,), dtype: np.float32
+    vector: np.ndarray          # Shape: (53,), dtype: np.float32
     timestamp: float            # Creation timestamp
     metadata: Dict[str, any]    # Additional metadata
 
     def get_global_features() -> np.ndarray    # Indices 0-12
-    def get_hand_features() -> np.ndarray      # Indices 13-44
-    def get_game_time_features() -> np.ndarray # Indices 45-49
+    def get_hand_features() -> np.ndarray      # Indices 13-52
 ```
 
 ## Performance Metrics
@@ -186,7 +221,7 @@ class StateVector:
 ### Memory Usage
 
 - Frame buffer (1920×1080×3): ~6MB
-- State vector (50×4): ~200 bytes
+- State vector (53×4): ~200 bytes
 - Templates (8 cards): ~2MB
 - OCR models (ONNX): ~50MB
 - **Total:** ~58MB
@@ -220,19 +255,39 @@ state_builder = MinimalStateBuilder(deck)
 # Process a frame
 frame = capture.grab()
 detected_cards = card_matcher.detect_hand_cards(frame)
-elixir_count, tower_health, game_time = perception.detect_all_perceptions(frame)
+elixir_count, tower_health = perception.detect_all_perceptions(frame)
 state_vector = state_builder.build_state(
     frame=frame,
     detected_cards=detected_cards,
     elixir_count=elixir_count,
     tower_health=tower_health,
-    match_time=game_time
+    match_time=time.time()
 )
 
 # Access state features
 global_features = state_vector.get_global_features()
 hand_features = state_vector.get_hand_features()
-game_time_features = state_vector.get_game_time_features()
+```
+
+### Gymnasium Environment Usage
+
+```python
+from src.bootstrap.bootstrap_env import BootstrapClashRoyaleEnv, EnvironmentConfig
+
+# Create environment
+config = EnvironmentConfig()
+env = BootstrapClashRoyaleEnv(config)
+
+# Reset and run episode
+obs, info = env.reset()
+done = False
+
+while not done:
+    action = env.action_space.sample()  # Replace with your policy
+    obs, reward, terminated, truncated, info = env.step(action)
+    done = terminated or truncated
+
+env.close()
 ```
 
 ## Validation Results
@@ -244,8 +299,9 @@ Phase 0 successfully meets all gate requirements:
 - ✓ Basic reward signal functional
 - ✓ 30-40% win rate vs easy AI
 - ✓ <500ms P95 action loop latency (achieved ~154ms)
-- ✓ State vector outputs exactly 50 dimensions
+- ✓ State vector outputs exactly 53 dimensions
 - ✓ All perception components meet accuracy targets
+- ✓ Gymnasium environment wrapper implemented
 
 ## Lessons Learned
 

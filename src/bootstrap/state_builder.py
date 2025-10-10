@@ -53,8 +53,9 @@ class StateVector:
         if not isinstance(self.vector, np.ndarray):
             raise ValueError("StateVector.vector must be a numpy array")
         
-        if self.vector.shape != (50,):
-            raise ValueError(f"StateVector.vector must have shape (50,), got {self.vector.shape}")
+        # Allow both 50 and 53 dimensional vectors for backward compatibility
+        if self.vector.shape not in [(50,), (53,)]:
+            raise ValueError(f"StateVector.vector must have shape (50,) or (53,), got {self.vector.shape}")
         
         if not np.all(np.isfinite(self.vector)):
             raise ValueError("StateVector.vector contains non-finite values (NaN or Inf)")
@@ -69,12 +70,8 @@ class StateVector:
         return self.vector[0:13]
     
     def get_hand_features(self) -> np.ndarray:
-        """Get the hand features (indices 13-44)."""
-        return self.vector[13:45]
-    
-    def get_game_time_features(self) -> np.ndarray:
-        """Get the game time features (indices 45-49)."""
-        return self.vector[45:50]
+        """Get the hand features (indices 13-52)."""
+        return self.vector[13:53]
 
 
 class MinimalStateBuilder:
@@ -153,15 +150,14 @@ class MinimalStateBuilder:
         """
         start_time = time.perf_counter()
         
-        # Initialize state vector with zeros
-        state_vector = np.zeros(50, dtype=np.float32)
+        # Initialize state vector with zeros (53 dimensions)
+        state_vector = np.zeros(53, dtype=np.float32)
         
         # 1. Global features (13 dims)
         self._extract_global_features(state_vector, elixir_count, tower_health, match_time)
         
-        # 2. Hand features (32 dims)
-        self._extract_hand_features(state_vector, detected_cards, elixir_count)
-        
+        # 2. Hand features (40 dims: 4 cards × 10 features each)
+        self._extract_hand_features_efficient(state_vector, detected_cards, elixir_count)
         
         processing_time = (time.perf_counter() - start_time) * 1000
         print(f"StateBuilder: {processing_time:.2f}ms")
@@ -195,15 +191,14 @@ class MinimalStateBuilder:
         - 6 tower health percentages (0-1)
         - 4 phase indicators (early/mid/late/overtime)
         """
-        # Player elixir (index 0)
-        state_vector[0] = np.clip(elixir_count / 10.0, 0.0, 1.0)
+        # Player elixir (index 0) - not normalized
+        state_vector[0] = np.clip(elixir_count, 0, 10)
         
         # Opponent elixir placeholder (index 1) - not available in Phase 0
         state_vector[1] = -1.0
         
-        # Match time (index 2) - normalize to [0, 1], assuming 5 minutes max
-        normalized_time = np.clip(match_time / 300.0, 0.0, 1.0)
-        state_vector[2] = normalized_time
+        # Match time (index 2) - not normalized, seconds since start
+        state_vector[2] = match_time
         
         # Tower health values (indices 3-8)
         # Order: friendly princess left, friendly princess right, friendly king,
@@ -239,52 +234,45 @@ class MinimalStateBuilder:
         
         # Phase indicators (indices 9-12)
         # Assuming match_time is in seconds
-        # Early game: 0-120s, Mid game: 120-240s, Late game: 240-300s, Overtime: 300s+
+        # Early game: 0-120s, Mid game: 120-180s, Late game: 180-240s, Overtime: 180s+
         if match_time < 120:
             # Early game
             state_vector[9] = 1.0  # early
             state_vector[10] = 0.0  # mid
             state_vector[11] = 0.0  # late
             state_vector[12] = 0.0  # overtime
-        elif match_time < 240:
+        elif match_time < 180:
             # Mid game
             state_vector[9] = 0.0  # early
             state_vector[10] = 1.0  # mid
             state_vector[11] = 0.0  # late
             state_vector[12] = 0.0  # overtime
-        elif match_time < 300:
+        elif match_time < 240:
             # Late game
             state_vector[9] = 0.0  # early
             state_vector[10] = 0.0  # mid
             state_vector[11] = 1.0  # late
             state_vector[12] = 0.0  # overtime
         else:
-            # Overtime
+            # Overtime (240s+)
             state_vector[9] = 0.0  # early
             state_vector[10] = 0.0  # mid
             state_vector[11] = 0.0  # late
             state_vector[12] = 1.0  # overtime
     
-    def _extract_hand_features(self,
-                              state_vector: np.ndarray,
-                              detected_cards: Dict[int, Dict[str, Any]],
-                              elixir_count: int):
+    def _extract_hand_features_extended(self,
+                                       state_vector: np.ndarray,
+                                       detected_cards: Dict[int, Dict[str, Any]],
+                                       elixir_count: int):
         """
-        Extract hand features (indices 13-44).
+        Extract hand features for 53-dim vector (indices 13-52).
         
-        For each of 4 visible cards:
+        For each of 4 visible cards (10 features per card):
         - Card ID one-hot encoded (8 dims)
+        - Elixir cost (1 dim)
         - Affordability (can afford with current elixir) (1 dim)
-        - 6 basic attributes (6 dims)
         
-        Total: 4 cards × 15 features = 60 dimensions, but we only use 32
-        So we'll use simplified encoding:
-        - Card ID one-hot (8 dims)
-        - Affordability (1 dim)
-        - Top 3 attributes (3 dims)
-        
-        Total: 4 cards × 12 features = 48 dimensions
-        We'll use only first 32 dimensions
+        Total: 4 cards × 10 features = 40 dimensions
         """
         # Define the card elixir costs
         card_costs = {
@@ -301,7 +289,7 @@ class MinimalStateBuilder:
         # Process each visible card slot (1-4)
         for slot in range(1, 5):
             slot_idx = slot - 1
-            start_idx = 13 + slot_idx * 8  # 8 features per card
+            start_idx = 13 + slot_idx * 10  # 10 features per card
             
             if slot in detected_cards and detected_cards[slot]['card_id'] is not None:
                 card_name = detected_cards[slot]['card_id']
@@ -309,12 +297,63 @@ class MinimalStateBuilder:
                 # Card ID one-hot encoded (8 dims)
                 state_vector[start_idx:start_idx + 8] = self.card_one_hot.get(card_name, np.zeros(8))
                 
-                # For Phase 0, we're using a simplified approach with just 8 features per card
-                # The card ID one-hot encoding provides most of the information
-                # Additional features will be added in Phase 1
+                # Elixir cost (1 dim) - normalized to [0, 1]
+                elixir_cost = card_costs.get(card_name, 0)
+                state_vector[start_idx + 8] = elixir_cost / 10.0  # Normalize by max elixir
+                
+                # Affordability (1 dim) - can afford with current elixir
+                state_vector[start_idx + 9] = 1.0 if elixir_count >= elixir_cost else 0.0
             else:
                 # No card detected, fill with zeros
-                state_vector[start_idx:start_idx + 8] = 0.0
+                state_vector[start_idx:start_idx + 10] = 0.0
+    def _extract_hand_features_efficient(self,
+                                       state_vector: np.ndarray,
+                                       detected_cards: Dict[int, Dict[str, Any]],
+                                       elixir_count: int):
+        """
+        Extract hand features for 53-dim vector (indices 13-52).
+        
+        For each of 4 visible cards (10 features per card):
+        - Card ID (1 dim) - values 0-7 (not one-hot)
+        - Card attributes (8 dims) - from CARD_ATTRIBUTE_MAP
+        - Elixir cost (1 dim) - values 0-10 (not normalized)
+        
+        Total: 4 cards × 10 features = 40 dimensions
+        """
+        # Define the card elixir costs
+        card_costs = {
+            'archers': 3,
+            'giant': 5,
+            'knight': 3,
+            'mini_pekka': 4,
+            'goblin_hut': 5,
+            'minions': 3,
+            'musketeer': 4,
+            'valkyrie': 4
+        }
+        
+        # Process each visible card slot (1-4)
+        for slot in range(1, 5):
+            slot_idx = slot - 1
+            start_idx = 13 + slot_idx * 10  # 10 features per card
+            
+            if slot in detected_cards and detected_cards[slot]['card_id'] is not None:
+                card_name = detected_cards[slot]['card_id']
+                
+                # Card ID (1 dim) - values 1-8 (no normalization)
+                card_id = self.card_id_map.get(card_name, 0)
+                state_vector[start_idx] = card_id + 1  # 1-8 range
+                
+                # Card attributes (8 dims) - from CARD_ATTRIBUTE_MAP
+                card_attrs = self.CARD_ATTRIBUTE_MAP.get(card_name, [0] * 8)
+                state_vector[start_idx + 1:start_idx + 9] = card_attrs
+                
+                # Elixir cost (1 dim) - values 0-10 (not normalized)
+                elixir_cost = card_costs.get(card_name, 0)
+                state_vector[start_idx + 9] = elixir_cost
+            else:
+                # No card detected, fill with zeros
+                state_vector[start_idx:start_idx + 10] = 0.0
     
     def _extract_game_time_features(self,
                                   state_vector: np.ndarray,
