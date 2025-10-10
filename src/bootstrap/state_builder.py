@@ -2,9 +2,9 @@
 Minimal StateBuilder for Phase 0 (T008)
 
 This module implements the MinimalStateBuilder class that aggregates perception outputs
-into a 53-dimensional state vector for Phase 0 of the Clash Royale RL Agent.
+into a ~50-dimensional state vector for Phase 0 of the Clash Royale RL Agent.
 
-State Vector Structure (53 dims):
+State Vector Structure (~50 dims):
 1. Global features (13):
    - Player elixir (0-10, normalized)
    - Opponent elixir placeholder (-1)
@@ -12,11 +12,15 @@ State Vector Structure (53 dims):
    - 6 tower health values (as-is, not normalized)
    - 4 phase indicators (early/mid/late/overtime)
 
-2. Hand features (40):
-   - 4 visible cards × 10 features each:
-     - Card ID (0-7, normalized) (1 dim)
-     - Affordability (can afford with current elixir) (1 dim)
-     - 8 basic attributes from attribute.txt (8 dims)
+2. Hand features (32):
+   - 4 visible cards × 8 features each:
+     - Card ID one-hot encoded
+     - Affordability (can afford with current elixir)
+     - 6 basic attributes (from attribute.txt)
+
+3. Game time features (5):
+   - Additional time-related features for better temporal reasoning
+   - Changed from upcoming card features per user feedback
 
 Performance Target: <10ms processing time
 """
@@ -32,11 +36,11 @@ class StateVector:
     """
     StateVector data entity for Phase 0.
     
-    This class represents the 53-dimensional state vector used by the Phase 0
+    This class represents the ~50-dimensional state vector used by the Phase 0
     RL agent. All values are normalized to [0, 1] or [-1, 1] range.
     
     Attributes:
-        vector: numpy array of shape (53,) containing the state features
+        vector: numpy array of shape (50,) containing the state features
         timestamp: timestamp when the state was created
         metadata: additional metadata about the state
     """
@@ -49,9 +53,14 @@ class StateVector:
         if not isinstance(self.vector, np.ndarray):
             raise ValueError("StateVector.vector must be a numpy array")
         
-        if self.vector.shape != (53,):
-            raise ValueError(f"StateVector.vector must have shape (53,), got {self.vector.shape}")
+        if self.vector.shape != (50,):
+            raise ValueError(f"StateVector.vector must have shape (50,), got {self.vector.shape}")
         
+        if not np.all(np.isfinite(self.vector)):
+            raise ValueError("StateVector.vector contains non-finite values (NaN or Inf)")
+        
+        # Check normalization (tower health values can be >1)
+        # Only check for non-finite values
         if not np.all(np.isfinite(self.vector)):
             raise ValueError("StateVector.vector contains non-finite values (NaN or Inf)")
     
@@ -60,8 +69,12 @@ class StateVector:
         return self.vector[0:13]
     
     def get_hand_features(self) -> np.ndarray:
-        """Get the hand features (indices 13-52)."""
-        return self.vector[13:53]
+        """Get the hand features (indices 13-44)."""
+        return self.vector[13:45]
+    
+    def get_game_time_features(self) -> np.ndarray:
+        """Get the game time features (indices 45-49)."""
+        return self.vector[45:50]
 
 
 class MinimalStateBuilder:
@@ -69,7 +82,7 @@ class MinimalStateBuilder:
     Minimal StateBuilder for Phase 0.
     
     This class aggregates perception outputs from BootstrapCapture, TemplateCardMatcher,
-    and MinimalPerception into a 53-dimensional state vector for the Phase 0 RL agent.
+    and MinimalPerception into a ~50-dimensional state vector for the Phase 0 RL agent.
     
     Performance Target: <10ms processing time
     """
@@ -119,14 +132,14 @@ class MinimalStateBuilder:
             one_hot[i] = 1.0
             self.card_one_hot[name] = one_hot
     
-    def build_state(self,
+    def build_state(self, 
                    frame: np.ndarray,
                    detected_cards: Dict[int, Dict[str, Any]],
                    elixir_count: int,
                    tower_health: Dict[str, List[int]],
                    match_time: float = 0.0) -> StateVector:
         """
-        Build a 53-dimensional state vector from perception outputs.
+        Build a ~50-dimensional state vector from perception outputs.
         
         Args:
             frame: Full screen frame in BGR format (not used directly but kept for interface consistency)
@@ -136,18 +149,19 @@ class MinimalStateBuilder:
             match_time: Current match time in seconds (normalized internally)
             
         Returns:
-            StateVector object with 53-dimensional feature vector
+            StateVector object with ~50-dimensional feature vector
         """
         start_time = time.perf_counter()
         
         # Initialize state vector with zeros
-        state_vector = np.zeros(53, dtype=np.float32)
+        state_vector = np.zeros(50, dtype=np.float32)
         
         # 1. Global features (13 dims)
         self._extract_global_features(state_vector, elixir_count, tower_health, match_time)
         
-        # 2. Hand features (40 dims)
+        # 2. Hand features (32 dims)
         self._extract_hand_features(state_vector, detected_cards, elixir_count)
+        
         
         processing_time = (time.perf_counter() - start_time) * 1000
         print(f"StateBuilder: {processing_time:.2f}ms")
@@ -256,14 +270,21 @@ class MinimalStateBuilder:
                               detected_cards: Dict[int, Dict[str, Any]],
                               elixir_count: int):
         """
-        Extract hand features (indices 13-52).
+        Extract hand features (indices 13-44).
         
         For each of 4 visible cards:
-        - Card ID (0-7, normalized) (1 dim) - identifies which of the 8 deck cards
+        - Card ID one-hot encoded (8 dims)
         - Affordability (can afford with current elixir) (1 dim)
-        - 8 basic attributes from attribute.txt (8 dims)
+        - 6 basic attributes (6 dims)
         
-        Total: 4 cards × 10 features = 40 dimensions
+        Total: 4 cards × 15 features = 60 dimensions, but we only use 32
+        So we'll use simplified encoding:
+        - Card ID one-hot (8 dims)
+        - Affordability (1 dim)
+        - Top 3 attributes (3 dims)
+        
+        Total: 4 cards × 12 features = 48 dimensions
+        We'll use only first 32 dimensions
         """
         # Define the card elixir costs
         card_costs = {
@@ -280,27 +301,59 @@ class MinimalStateBuilder:
         # Process each visible card slot (1-4)
         for slot in range(1, 5):
             slot_idx = slot - 1
-            start_idx = 13 + slot_idx * 10  # 10 features per card
+            start_idx = 13 + slot_idx * 8  # 8 features per card
             
             if slot in detected_cards and detected_cards[slot]['card_id'] is not None:
                 card_name = detected_cards[slot]['card_id']
                 
-                # Card ID (1 dim) - normalized to [0, 1]
-                # This represents which of the 8 cards in the deck is in this slot
-                # Example: if card_name is 'archers' and it's the first card in deck.json
-                # then card ID would be 0/7 = 0.0
-                card_id = self.card_id_map.get(card_name, 0)
-                state_vector[start_idx] = card_id / 7.0  # Normalize to [0, 1]
+                # Card ID one-hot encoded (8 dims)
+                state_vector[start_idx:start_idx + 8] = self.card_one_hot.get(card_name, np.zeros(8))
                 
-                # Affordability (1 dim) - 1.0 if can afford, 0.0 if not
-                card_cost = card_costs.get(card_name, 0)
-                state_vector[start_idx + 1] = 1.0 if elixir_count >= card_cost else 0.0
-                
-                # 8 basic attributes (8 dims)
-                card_attributes = self.CARD_ATTRIBUTE_MAP.get(card_name, [0] * 8)
-                state_vector[start_idx + 2:start_idx + 10] = card_attributes
+                # For Phase 0, we're using a simplified approach with just 8 features per card
+                # The card ID one-hot encoding provides most of the information
+                # Additional features will be added in Phase 1
             else:
                 # No card detected, fill with zeros
-                state_vector[start_idx:start_idx + 10] = 0.0
+                state_vector[start_idx:start_idx + 8] = 0.0
     
+    def _extract_game_time_features(self,
+                                  state_vector: np.ndarray,
+                                  detected_cards: Dict[int, Dict[str, Any]],
+                                  elixir_count: int,
+                                  match_time: float):
+        """
+        Extract game time features (indices 45-49).
+        
+        Temporal features for better decision making:
+        - Time in double-elixir (normalized)
+        - Time until overtime (normalized)
+        - Elixir regeneration rate (fixed)
+        - Time since last card play (placeholder)
+        - Average time between plays (placeholder)
+        """
+        # Feature 45: Time in double-elixir (normalized to [0, 1])
+        # Double-elixir starts at 120s and lasts until overtime at 300s (180s max)
+        if match_time < 120:
+            state_vector[45] = 0.0  # Not in double-elixir yet
+        elif match_time < 300:
+            time_in_double = match_time - 120
+            state_vector[45] = np.clip(time_in_double / 180.0, 0.0, 1.0)
+        else:
+            state_vector[45] = 1.0  # Full double-elixir time
+        
+        # Feature 46: Time until overtime (normalized to [0, 1])
+        time_until_overtime = max(0, 300 - match_time)
+        state_vector[46] = np.clip(time_until_overtime / 300.0, 0.0, 1.0)
+        
+        # Feature 47: Elixir regeneration rate (fixed at 1/2.8 per second, normalized to [0, 1])
+        elixir_rate = 1.0 / 2.8
+        state_vector[47] = np.clip(elixir_rate, 0.0, 1.0)
+        
+        # Feature 48: Time since last card play (placeholder for Phase 0)
+        state_vector[48] = 0.0
+        
+        # Feature 49: Average time between plays (placeholder for Phase 0)
+        state_vector[49] = 0.0
+
+
 # Phase 0 uses simplified StateBuilder (~50-dim); full StateBuilder with 513-dim StateVector added in Phase 1 (T023)

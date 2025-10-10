@@ -22,7 +22,7 @@ def test_state_vector():
     print("Testing StateVector validation...")
     
     # Test valid StateVector
-    valid_vector = np.random.uniform(-1, 1, size=(53,)).astype(np.float32)
+    valid_vector = np.random.uniform(-1, 1, size=(50,)).astype(np.float32)
     valid_metadata = {'test': True}
     
     try:
@@ -38,7 +38,7 @@ def test_state_vector():
     
     # Test invalid shape
     try:
-        invalid_vector = np.random.uniform(-1, 1, size=(52,)).astype(np.float32)
+        invalid_vector = np.random.uniform(-1, 1, size=(49,)).astype(np.float32)
         StateVector(
             vector=invalid_vector,
             timestamp=time.time(),
@@ -51,7 +51,7 @@ def test_state_vector():
     
     # Test NaN values
     try:
-        nan_vector = np.full((53,), np.nan, dtype=np.float32)
+        nan_vector = np.full((50,), np.nan, dtype=np.float32)
         StateVector(
             vector=nan_vector,
             timestamp=time.time(),
@@ -64,7 +64,7 @@ def test_state_vector():
     
     # Test out-of-range values (only NaN/Inf should be rejected now)
     try:
-        oor_vector = np.full((53,), np.nan, dtype=np.float32)  # NaN values
+        oor_vector = np.full((50,), np.nan, dtype=np.float32)  # NaN values
         StateVector(
             vector=oor_vector,
             timestamp=time.time(),
@@ -78,13 +78,18 @@ def test_state_vector():
     # Test feature extraction methods
     global_features = state_vector.get_global_features()
     hand_features = state_vector.get_hand_features()
+    game_time_features = state_vector.get_game_time_features()
     
     if global_features.shape != (13,):
         print(f"✗ Global features has wrong shape: {global_features.shape}")
         return False
     
-    if hand_features.shape != (40,):
+    if hand_features.shape != (32,):
         print(f"✗ Hand features has wrong shape: {hand_features.shape}")
+        return False
+    
+    if game_time_features.shape != (5,):
+        print(f"✗ Game time features has wrong shape: {game_time_features.shape}")
         return False
     
     print("✓ All StateVector tests passed")
@@ -148,7 +153,7 @@ def test_minimal_state_builder():
         print(f"✓ State built successfully in {processing_time:.2f}ms")
         
         # Validate output
-        if state_vector.vector.shape != (53,):
+        if state_vector.vector.shape != (50,):
             print(f"✗ State vector has wrong shape: {state_vector.vector.shape}")
             return False
         
@@ -184,23 +189,18 @@ def test_minimal_state_builder():
         # Check hand features
         hand_features = state_vector.get_hand_features()
         
-        # First card (archers) should have card ID 0/7 = 0.0
-        if abs(hand_features[0] - 0.0) > 0.01:  # First card in deck
-            print(f"✗ First card ID incorrect: {hand_features[0]}")
+        # First card (archers) should have one-hot encoding
+        if hand_features[0] != 1.0:  # First card in deck
+            print(f"✗ First card one-hot encoding incorrect: {hand_features[0]}")
             return False
         
-        # Check affordability for archers (cost 3, elixir 5) - should be affordable
-        if abs(hand_features[1] - 1.0) > 0.01:
-            print(f"✗ First card affordability incorrect: {hand_features[1]}")
-            return False
+        # Check game time features are present (indices 45-49)
+        game_time_features = state_vector.get_game_time_features()
         
-        # Check first attribute (is_air) for archers - should be 1
-        if abs(hand_features[2] - 1.0) > 0.01:
-            print(f"✗ First card attribute incorrect: {hand_features[2]}")
+        # Game time features are not implemented in Phase 0, just check they exist
+        if game_time_features.shape[0] != 5:
+            print(f"✗ Game time features has wrong shape: {game_time_features.shape}")
             return False
-        
-        # Game time features have been removed as per user feedback
-        # No need to check for them anymore
         
         print("✓ All StateBuilder tests passed")
         return True

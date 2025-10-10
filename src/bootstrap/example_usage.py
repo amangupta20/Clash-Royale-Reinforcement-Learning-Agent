@@ -106,7 +106,8 @@ def main():
                 # Print state vector summary
                 global_features = state_vector.get_global_features()
                 hand_features = state_vector.get_hand_features()
-
+                game_time_features = state_vector.get_game_time_features()
+                
                 print(f"State vector shape: {state_vector.vector.shape}")
                 print(f"Global features: elixir={global_features[0]:.2f}, match_time={global_features[2]:.2f}")
                 print(f"Game time features: double_elixir={game_time_features[0]:.2f}, until_overtime={game_time_features[1]:.2f}")
