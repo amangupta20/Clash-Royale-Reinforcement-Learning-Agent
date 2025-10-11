@@ -7,8 +7,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from paddleocr import PaddleOCR  # GPU-enabled PaddleOCR expected to be installed
-import paddle  # noqa: F401  (kept in case future device checks desired)
-paddle.set_device('gpu:0')
+#import paddle  # noqa: F401  (kept in case future device checks desired)
+#paddle.set_device('gpu:0')
 
 
 class MinimalPerception:
@@ -98,8 +98,6 @@ class MinimalPerception:
             reader = PaddleOCR(**onnx_kwargs)
             self.ocr_device = 'onnx_cpu'
             
-            print("✓ PaddleOCR initialized successfully with ONNX Runtime")
-            print("  Expected performance: ~43ms per OCR call, ~91ms total for 7 calls")
             return reader
             
         except Exception as onnx_err:
