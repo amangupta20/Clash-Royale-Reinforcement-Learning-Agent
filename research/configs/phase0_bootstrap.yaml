@@ -64,7 +64,7 @@ environment:
     ]
 
   # Manual outcome input for Phase 0 (when automatic detection is not available)
-  manual_outcome_input: true
+  manual_outcome_input: false
   outcome_check_delay_seconds: 30 # Check for outcome after 40 seconds
 
 policy:

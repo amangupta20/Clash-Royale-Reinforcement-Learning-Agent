@@ -411,6 +411,7 @@ class BootstrapActionExecutor(BaseActionExecutor):
         """
         try:
             # Step 1: Select the card
+            logger.info(f"Tapping card at {card_coords}")
             if not self._execute_tap(card_coords):
                 logger.error(f"Failed to tap card at coordinates: {card_coords}")
                 return False
@@ -419,7 +420,7 @@ class BootstrapActionExecutor(BaseActionExecutor):
             delay_ms = random.randint(*self.delay_range)
             time.sleep(delay_ms / 1000.0)
             
-            # Step 3: Deploy the card
+            logger.info(f"Deploying at {deploy_coords}")
             if not self._execute_tap(deploy_coords):
                 logger.error(f"Failed to deploy card at coordinates: {deploy_coords}")
                 return False

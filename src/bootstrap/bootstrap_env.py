@@ -169,6 +169,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
         self._last_tower_health = None
         self._step_count = 0
         self._episode_count = 0
+        self._zero_health_frames = 0
         
         # Manual win/loss tracking for Phase 0
         self._manual_outcome_input = self.config.manual_outcome_input
@@ -194,7 +195,6 @@ class BootstrapClashRoyaleEnv(gym.Env):
         self._last_detected_cards = {}
         
         # Rate limiting for state building
-        self._last_state_build_time = 0
         self._state_build_interval = 2.5  # 2.5 seconds between state builds
         self._cached_state = None
         
@@ -282,6 +282,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
         Returns:
             Tuple of (observation, reward, terminated, truncated, info)
         """
+        #time.sleep(1.0)  # Ensure minimum delay between actions
         if self._game_phase == GamePhase.ENDED:
             # Instead of raising an error, reset the environment automatically
             logger.info("Environment was in ENDED state, auto-resetting...")
@@ -290,7 +291,6 @@ class BootstrapClashRoyaleEnv(gym.Env):
         
         step_start_time = time.perf_counter()
         self._step_count += 1
-        current_time = time.time()
         
         # Log received action
         logger.info(f"Step {self._step_count}: Received action: {action}")
@@ -318,12 +318,12 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             # Check for elixir penalty (elixir = 10)
             elixir_penalty = 0
-            if self._current_state is not None and len(self._current_state) > 0 and self._current_state[0] >= 10:
-                elixir_penalty = -0.01
+            if self._current_state is not None and len(self._current_state) > 0 and self._current_state[0] >= 9:
+                elixir_penalty = -2
             
             # Handle "no action" (card_slot = 4)
             if card_slot == 4:
-                # No action execution, just wait
+              #  time.sleep(0.5)
                 obs = self._get_current_state()
                 reward = elixir_penalty  # Only elixir penalty
                 terminated = False
@@ -364,11 +364,9 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             # Execute action
             action_success = self._execute_action(card_slot, grid_x, grid_y)
-            
-            # Wait for action to complete (2.5 seconds)
-            delay_ms = 2500
-            logger.info(f"Waiting {delay_ms}ms after action execution...")
-            time.sleep(delay_ms / 1000.0)
+            if card_slot != 4: # Only wait if we actually played a card
+                time.sleep(1)
+
             
             # Get current state
             obs = self._get_current_state()
@@ -510,15 +508,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
         
         Returns:
             53-dimensional state vector
-        """
-        current_time = time.time()
-        
-        # Check if we should build a new state (rate limiting)
-        if (self._cached_state is not None and
-            current_time - self._last_state_build_time < self._state_build_interval):
-            # Return cached state
-            return self._cached_state
-        
+        """       
         try:
             # Capture frame
             frame = self.capture.grab()
@@ -528,7 +518,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             # Detect cards in hand
             detected_cards = self.card_matcher.detect_hand_cards(frame)
-            
+            logger.info(f"Detected cards: {detected_cards}")
             # Store detected cards for action validation
             self._last_detected_cards = detected_cards
             
@@ -560,7 +550,6 @@ class BootstrapClashRoyaleEnv(gym.Env):
             self._last_tower_health = tower_health
             
             # Update rate limiting info
-            self._last_state_build_time = current_time
             
             # Ensure we have exactly 53 dimensions
             state = state_vector.vector
@@ -604,7 +593,9 @@ class BootstrapClashRoyaleEnv(gym.Env):
         
         # Check if there's a card detected in this slot
         # Only validate if not "no action"
+        '''
         if card_slot != 4:
+            #time.sleep(1)
             # Template matcher uses 1-based indexing (1-4), so adjust for 0-based (0-3)
             template_slot = card_slot + 1
             
@@ -613,7 +604,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             if not self._last_detected_cards:
                 logger.warning(f"No cards detected at all, allowing action in slot {card_slot}")
                 return True
-            
+
             if template_slot not in self._last_detected_cards:
                 logger.warning(f"No card detected in slot {card_slot} (template slot {template_slot}). Available slots: {list(self._last_detected_cards.keys())}")
                 # Allow action anyway to prevent getting stuck
@@ -629,7 +620,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             if 'card_id' not in detected_card:
                 logger.warning(f"Invalid card detection in slot {card_slot} (template slot {template_slot}): {detected_card}")
                 return True  # Allow action to prevent getting stuck
-        
+        '''
         # Validate grid coordinates
         if not (0 <= grid_x < 32) or not (0 <= grid_y < 18):
             return False
@@ -639,6 +630,9 @@ class BootstrapClashRoyaleEnv(gym.Env):
         detected_card = self._last_detected_cards.get(template_slot)
         if not detected_card or 'card_id' not in detected_card:
             logger.warning(f"Card slot {card_slot} is not detected in hand")
+            return False
+        if self._last_detected_cards[template_slot]['card_id'] is None:
+            logger.warning(f"No card detected in slot {card_slot} (template slot {template_slot}). Available slots: {list(self._last_detected_cards.keys())}")
             return False
         
         # Check if we can afford the card
@@ -675,7 +669,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             # Convert 0-based slot to 1-based for executor (template matcher uses 1-based)
             action = {
-                'card_slot': card_slot + 1,  # Convert to 1-based (1-4)
+                'card_slot': card_slot,  # Convert to 1-based (1-4)
                 'grid_x': grid_x,
                 'grid_y': grid_y
             }
@@ -758,25 +752,9 @@ class BootstrapClashRoyaleEnv(gym.Env):
         
         # Check for game end (simplified)
         # In a full implementation, we would detect victory/defeat screens
-        if current_tower_health:
-            # Check if any king tower is destroyed
-            friendly_king_health = current_tower_health['friendly'][2] if len(current_tower_health['friendly']) > 2 else 0
-            enemy_king_health = current_tower_health['enemy'][2] if len(current_tower_health['enemy']) > 2 else 0
-            
-            # Debug: Log tower health
-            logger.info(f"Tower health - Friendly: {friendly_king_health}, Enemy: {enemy_king_health}")
-            
+        
             # Only terminate if a king tower is actually destroyed (health <= 0)
-            if friendly_king_health <= 0:
-                # Loss
-                reward -= 1.0
-                terminated = True
-                logger.info("Game ended - Defeat")
-            elif enemy_king_health <= 0:
-                # Win
-                reward += 1.0
-                terminated = True
-                logger.info("Game ended - Victory")
+           
         
         # Manual outcome input for Phase 0 (when automatic detection is not available)
         if self._manual_outcome_input and not terminated:
@@ -829,7 +807,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             reward -= 0.05
         
         # Check for timeout (truncated)
-        if self._match_start_time and (time.time() - self._match_start_time) > 300:  # 5 minutes
+        if self._match_start_time and (time.time() - self._match_start_time) > 120:  # 2 minutes
             truncated = True
             logger.info(f"Game ended - Timeout after {time.time() - self._match_start_time:.2f} seconds")
         else:
