@@ -303,6 +303,200 @@ Phase 0 successfully meets all gate requirements:
 - ✓ All perception components meet accuracy targets
 - ✓ Gymnasium environment wrapper implemented
 
+## PPO Training Infrastructure (T012)
+
+### Overview
+
+Phase 0 includes a complete PPO training infrastructure built on Stable-Baselines3 that enables training the bootstrap agent using Proximal Policy Optimization. The infrastructure integrates with the BootstrapClashRoyaleEnv and StructuredMLPPolicy from previous tasks to provide a complete training pipeline.
+
+### Architecture
+
+The training infrastructure consists of several key components:
+
+```
+BootstrapClashRoyaleEnv → VecMonitor → PPO (SB3) → BootstrapActorCriticPolicy
+                                              ↓
+                                      StructuredMLPPolicy (T011)
+                                              ↓
+                                      Value Head + Action Masking
+```
+
+### Actor-Critic Policy
+
+**Implementation:** `BootstrapActorCriticPolicy` in `src/bootstrap/bootstrap_trainer.py`
+
+The custom actor-critic policy extends SB3's `ActorCriticPolicy` and uses the `StructuredMLPPolicy` from T011 as a feature extractor:
+
+- **Shared Backbone:** Uses the StructuredMLPPolicy for feature extraction
+- **Policy Head:** Existing action heads (card_slot, grid_x, grid_y) with action masking
+- **Value Head:** Additional MLP head for state value estimation
+- **Action Masking:** Ensures invalid card selections (unaffordable cards) are masked during training
+
+### Training Configuration
+
+**Phase 0 uses SB3 default hyperparameters; tuning in Phase 3**
+
+```python
+ppo_config = {
+    'learning_rate': 3e-4,
+    'n_steps': 2048,
+    'batch_size': 64,
+    'n_epochs': 10,
+    'gamma': 0.99,
+    'gae_lambda': 0.95,
+    'clip_range': 0.2,
+    'ent_coef': 0.01,
+    'vf_coef': 0.5,
+    'max_grad_norm': 0.5
+}
+```
+
+### Training Infrastructure
+
+**Implementation:** `BootstrapPPOTrainer` in `src/bootstrap/bootstrap_trainer.py`
+
+The trainer class provides a complete training pipeline with:
+
+1. **Environment Setup:** Creates and wraps the BootstrapClashRoyaleEnv with VecMonitor
+2. **Model Initialization:** Configures PPO with the custom actor-critic policy
+3. **Training Loop:** Manages the training process with callbacks
+4. **Logging:** TensorBoard integration for real-time metrics
+5. **Checkpointing:** Automatic checkpoint saving with metadata
+6. **Early Stopping:** Monitors performance and stops training if rewards plateau
+
+### TensorBoard Logging
+
+The trainer integrates with TensorBoard for comprehensive training metrics:
+
+- **Rewards:** Episode rewards and running averages
+- **Policy Loss:** PPO policy loss over time
+- **Value Loss:** Value function loss
+- **Entropy:** Policy entropy for exploration monitoring
+- **KL Divergence:** Policy update magnitude tracking
+- **Gradient Norm:** Gradient clipping statistics
+
+### Checkpoint Management
+
+**Implementation:** `CheckpointCallback` in `src/bootstrap/bootstrap_trainer.py`
+
+- **Frequency:** Saves every 10K steps (configurable)
+- **Metadata:** Includes git SHA, config, timestamp, and performance metrics
+- **Format:** SB3-compatible zip format with JSON metadata
+- **Storage:** Organized in configurable directory structure
+
+**Checkpoint Metadata Example:**
+
+```json
+{
+  "step": 50000,
+  "timestamp": 1694678400.0,
+  "git_sha": "a1b2c3d4e5f6...",
+  "config": {...},
+  "mean_reward": 0.65,
+  "episode_length": 180.5
+}
+```
+
+### Early Stopping
+
+**Implementation:** `EarlyStoppingCallback` in `src/bootstrap/bootstrap_trainer.py`
+
+- **Patience:** 100K steps without improvement before stopping
+- **Threshold:** Minimum mean reward of 0.5 to trigger early stopping
+- **Monitoring:** Tracks running average of episode rewards
+- **Recovery:** Preserves best model when stopped
+
+### Usage Example
+
+```python
+from src.bootstrap.bootstrap_trainer import create_bootstrap_ppo_trainer, PPOConfig
+from src.bootstrap.bootstrap_env import EnvironmentConfig
+
+# Create environment configuration
+env_config = EnvironmentConfig(
+    window_name="BlueStacks App Player 1",
+    resolution="1920x1080"
+)
+
+# Create PPO configuration
+ppo_config = PPOConfig(
+    learning_rate=3e-4,
+    n_steps=2048,
+    batch_size=64,
+    checkpoint_dir="./checkpoints",
+    tensorboard_log="./logs/tensorboard"
+)
+
+# Create trainer
+trainer = create_bootstrap_ppo_trainer(
+    env_config=env_config,
+    ppo_config=ppo_config
+)
+
+# Train the model
+training_stats = trainer.train(total_timesteps=1000000)
+
+# Save final model
+trainer.save_model("./models/bootstrap_ppo_model")
+
+# Evaluate the trained model
+eval_stats = trainer.evaluate(n_eval_episodes=10)
+print(f"Evaluation mean reward: {eval_stats['mean_reward']:.3f}")
+
+# Clean up
+trainer.close()
+```
+
+### Training Pipeline
+
+1. **Initialization:** Create environment and PPO model with custom policy
+2. **Rollout Collection:** Collect experience using current policy
+3. **Advantage Estimation:** Compute advantages using GAE (λ=0.95)
+4. **Policy Update:** Update policy using PPO clipped objective
+5. **Value Update:** Update value function using MSE loss
+6. **Logging:** Record metrics to TensorBoard
+7. **Checkpointing:** Save model and metadata periodically
+8. **Early Stopping:** Monitor and stop if performance plateaus
+
+### Performance Targets
+
+- **Training Stability:** No divergence during test runs
+- **Memory Efficiency:** Handle batch sizes up to 64
+- **Logging Overhead:** <5% of training time
+- **Checkpoint Size:** <50MB for complete model with metadata
+
+### Integration with Phase 0 Components
+
+The training infrastructure seamlessly integrates with all Phase 0 components:
+
+- **Environment:** Uses BootstrapClashRoyaleEnv (T010)
+- **Policy Network:** Uses StructuredMLPPolicy (T011) as feature extractor
+- **Action Space:** MultiDiscrete([4, 32, 18]) for card selection and placement
+- **State Space:** 53-dimensional state vector from MinimalStateBuilder
+- **Action Masking:** Handles elixir constraints during training
+
+### Testing and Validation
+
+**Implementation:** `test/test_bootstrap_trainer.py`
+
+Comprehensive test suite validates:
+
+- PPO configuration parameters
+- Actor-critic policy forward and backward passes
+- Training initialization and execution
+- Model saving and loading
+- Checkpoint creation with metadata
+- Early stopping functionality
+- Factory function for trainer creation
+
+### Dependencies
+
+- **stable-baselines3:** PPO implementation
+- **torch:** PyTorch backend for neural networks
+- **tensorboard:** Real-time training visualization
+- **gymnasium:** Environment interface
+- **numpy:** Array operations
+
 ## Lessons Learned
 
 1. **ONNX Runtime:** Provides significant speedup for PaddleOCR (1.45x faster)
@@ -310,3 +504,6 @@ Phase 0 successfully meets all gate requirements:
 3. **Normalization:** Tower health should be passed as-is rather than normalized due to varying max values
 4. **Temporal Features:** Game time features provide valuable context for decision making
 5. **Modular Design:** Component isolation enables smooth migration to Phase 1
+6. **Action Masking:** Essential for valid action selection during PPO training
+7. **Checkpoint Metadata:** Git SHA integration enables reproducible training runs
+8. **Early Stopping:** Prevents overfitting and saves computational resources

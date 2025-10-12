@@ -15,6 +15,7 @@ Structured MLP with shared card encoder for efficient learning
 
 import time
 import pickle
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,6 +24,9 @@ from typing import Dict, Any, Tuple, Optional, Union
 
 # Import policy interfaces
 from policy.interfaces import Policy, PolicyConfig
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class CardEncoder(nn.Module):
@@ -214,6 +218,11 @@ class StructuredMLPPolicy(nn.Module, Policy):
         x_logits = self.x_head(fused_repr)        # (batch_size, 32)
         y_logits = self.y_head(fused_repr)        # (batch_size, 18)
         
+        # Debug: Check tensor shapes
+        logger.debug(f"card_logits shape: {card_logits.shape}")
+        logger.debug(f"x_logits shape: {x_logits.shape}")
+        logger.debug(f"y_logits shape: {y_logits.shape}")
+        
         # Combine logits for MultiDiscrete action space
         # Return as separate tensors for easier handling
         return card_logits, x_logits, y_logits
@@ -234,35 +243,18 @@ class StructuredMLPPolicy(nn.Module, Policy):
         """
         Apply action masking to prevent selecting unavailable cards.
         
+        Cards are only visible when they're playable (have enough elixir),
+        so we don't need to apply any masking.
+        
         Args:
             card_logits: Card selection logits of shape (batch_size, 4)
             state: State tensor of shape (batch_size, 53)
             
         Returns:
-            Masked card logits
+            Unmasked card logits
         """
-        batch_size = card_logits.shape[0]
-        masked_logits = card_logits.clone()
-        
-        for i in range(batch_size):
-            # Extract elixir count and card costs from state
-            elixir_count = state[i, 0].item()  # Global feature 0: player elixir
-            
-            # Extract card costs from hand state (indices 52, 62, 72, 82 in 53-dim state)
-            # In the 53-dim state, card costs are at indices 22, 32, 42, 52
-            card_costs = [
-                state[i, 22].item(),  # Card 1 cost
-                state[i, 32].item(),  # Card 2 cost
-                state[i, 42].item(),  # Card 3 cost
-                state[i, 52].item()   # Card 4 cost
-            ]
-            
-            # Mask cards that can't be afforded
-            for card_idx, cost in enumerate(card_costs):
-                if elixir_count < cost:
-                    masked_logits[i, card_idx] = float('-inf')
-        
-        return masked_logits
+        # No masking needed since cards are only visible when playable
+        return card_logits
     
     def act(self, state: np.ndarray, deterministic: Optional[bool] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         """

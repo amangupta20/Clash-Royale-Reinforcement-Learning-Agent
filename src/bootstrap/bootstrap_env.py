@@ -58,7 +58,7 @@ class EnvironmentConfig:
     
     # Performance settings
     max_step_time_ms: float = 500.0
-    action_delay_ms: float = 1000.0
+    action_delay_ms: float = 2500.0  # 1 second delay between actions
     
     # Game settings
     card_names: List[str] = None
@@ -131,7 +131,8 @@ class BootstrapClashRoyaleEnv(gym.Env):
             raise ValueError("Exactly 8 card names required for deck")
         
         # Define action and observation spaces
-        self.action_space = spaces.MultiDiscrete([4, 32, 18])
+        # 5 options for card_slot (0-3 for cards + 4 for no action)
+        self.action_space = spaces.MultiDiscrete([5, 32, 18])
         self.observation_space = spaces.Box(
             low=-1.0, 
             high=1.0, 
@@ -179,6 +180,17 @@ class BootstrapClashRoyaleEnv(gym.Env):
             'musketeer': 4,
             'valkyrie': 4
         }
+        
+        # Store last detected cards for action validation
+        self._last_detected_cards = {}
+        
+        # Rate limiting for state building
+        self._last_state_build_time = 0
+        self._state_build_interval = 2.5  # 2.5 seconds between state builds
+        self._cached_state = None
+        
+        # Action timing
+        self._last_action_time = 0
         
         logger.info(f"BootstrapClashRoyaleEnv initialized with {len(self.config.card_names)} cards")
     
@@ -266,17 +278,61 @@ class BootstrapClashRoyaleEnv(gym.Env):
         
         step_start_time = time.perf_counter()
         self._step_count += 1
+        current_time = time.time()
+        
+        # Log received action
+        logger.info(f"Step {self._step_count}: Received action: {action}")
         
         try:
             # Extract action components
-            card_slot = int(action[0])
-            grid_x = int(action[1])
-            grid_y = int(action[2])
+            if isinstance(action, np.ndarray):
+                if action.ndim == 1:
+                    card_slot = int(action[0])
+                    grid_x = int(action[1])
+                    grid_y = int(action[2])
+                else:
+                    # Handle case where action is 2D with batch dimension
+                    card_slot = int(action[0, 0])
+                    grid_x = int(action[0, 1])
+                    grid_y = int(action[0, 2])
+            else:
+                # Handle case where action might be a list or other type
+                card_slot = int(action[0])
+                grid_x = int(action[1])
+                grid_y = int(action[2])
+            
+            # Store current state for elixir penalty check
+            self._current_state = self._get_current_state()
+            
+            # Check for elixir penalty (elixir = 10)
+            elixir_penalty = 0
+            if self._current_state[0] >= 10:  # Elixir is at index 0
+                elixir_penalty = -0.01
+            
+            # Handle "no action" (card_slot = 4)
+            if card_slot == 4:
+                # No action execution, just wait
+                obs = self._get_current_state()
+                reward = elixir_penalty  # Only elixir penalty
+                terminated = False
+                truncated = False
+                
+                info = {
+                    'step_count': self._step_count,
+                    'game_phase': self._game_phase.value,
+                    'action_valid': True,
+                    'action': {'card_slot': card_slot, 'grid_x': grid_x, 'grid_y': grid_y},
+                    'action_type': 'no_action',
+                    'elixir_penalty': elixir_penalty
+                }
+                
+                logger.info(f"No action taken (step {self._step_count})")
+                return obs, reward, terminated, truncated, info
             
             # Validate action
             if not self._validate_action(card_slot, grid_x, grid_y):
                 logger.warning(f"Invalid action: [{card_slot}, {grid_x}, {grid_y}]")
-                reward = -0.1  # Small penalty for invalid action
+                reward = -0.1 + elixir_penalty  # Invalid action penalty + elixir penalty
                 terminated = False
                 truncated = False
                 obs = self._get_current_state()
@@ -285,7 +341,8 @@ class BootstrapClashRoyaleEnv(gym.Env):
                     'step_count': self._step_count,
                     'game_phase': self._game_phase.value,
                     'action_valid': False,
-                    'action': {'card_slot': card_slot, 'grid_x': grid_x, 'grid_y': grid_y}
+                    'action': {'card_slot': card_slot, 'grid_x': grid_x, 'grid_y': grid_y},
+                    'elixir_penalty': elixir_penalty
                 }
                 
                 return obs, reward, terminated, truncated, info
@@ -296,18 +353,32 @@ class BootstrapClashRoyaleEnv(gym.Env):
             # Execute action
             action_success = self._execute_action(card_slot, grid_x, grid_y)
             
-            # Wait for action to complete
-            time.sleep(self.config.action_delay_ms / 1000.0)
+            # Wait for action to complete (2.5 seconds)
+            delay_ms = 2500
+            logger.info(f"Waiting {delay_ms}ms after action execution...")
+            time.sleep(delay_ms / 1000.0)
             
             # Get current state
             obs = self._get_current_state()
             
+            logger.info(f"Action executed: card_slot={card_slot}, grid_x={grid_x}, grid_y={grid_y}, success={action_success}")
+            
             # Calculate reward
             reward, terminated, truncated = self._calculate_reward(prev_tower_health, action_success)
+            
+            # Add elixir penalty
+            elixir_penalty = 0
+            if self._current_state[0] >= 10:  # Elixir is at index 0
+                elixir_penalty = -0.01
+            reward += elixir_penalty
+            
+            # Debug: Log reward and termination
+            logger.info(f"Reward: {reward}, Terminated: {terminated}, Truncated: {truncated}")
             
             # Update game phase if needed
             if terminated:
                 self._game_phase = GamePhase.ENDED
+                logger.info(f"Game phase updated to ENDED at step {self._step_count}")
             
             # Track performance
             step_time = (time.perf_counter() - step_start_time) * 1000
@@ -411,10 +482,19 @@ class BootstrapClashRoyaleEnv(gym.Env):
     def _get_current_state(self) -> np.ndarray:
         """
         Get the current state from all perception components.
+        Uses rate limiting to avoid continuous OCR and template matching.
         
         Returns:
             53-dimensional state vector
         """
+        current_time = time.time()
+        
+        # Check if we should build a new state (rate limiting)
+        if (self._cached_state is not None and
+            current_time - self._last_state_build_time < self._state_build_interval):
+            # Return cached state
+            return self._cached_state
+        
         try:
             # Capture frame
             frame = self.capture.grab()
@@ -424,6 +504,13 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             # Detect cards in hand
             detected_cards = self.card_matcher.detect_hand_cards(frame)
+            
+            # Store detected cards for action validation
+            self._last_detected_cards = detected_cards
+            
+            # Debug: Log detected cards
+            if self._step_count % 100 == 0:  # Log every 100 steps to avoid spam
+                logger.info(f"Detected cards in slots: {list(detected_cards.keys())}")
             
             # Detect elixir
             elixir_count = self.perception.detect_elixir(frame)
@@ -448,6 +535,9 @@ class BootstrapClashRoyaleEnv(gym.Env):
             # Update last tower health for reward calculation
             self._last_tower_health = tower_health
             
+            # Update rate limiting info
+            self._last_state_build_time = current_time
+            
             # Ensure we have exactly 53 dimensions
             state = state_vector.vector
             if state.shape[0] != 53:
@@ -457,6 +547,9 @@ class BootstrapClashRoyaleEnv(gym.Env):
                     state = np.pad(state, (0, 53 - state.shape[0]), 'constant')
                 else:
                     state = state[:53]
+            
+            # Cache the state
+            self._cached_state = state
             
             return state
             
@@ -469,24 +562,73 @@ class BootstrapClashRoyaleEnv(gym.Env):
         Validate the action parameters.
         
         Args:
-            card_slot: Card slot (0-3)
+            card_slot: Card slot (0-3 for cards, 4 for no action)
             grid_x: Grid X coordinate (0-31)
             grid_y: Grid Y coordinate (0-17)
             
         Returns:
             True if action is valid, False otherwise
         """
+        # Check for "no action" option
+        if card_slot == 4:
+            # No action is always valid, grid coordinates are ignored
+            return True
+        
         # Validate card_slot (0-3)
         if not (0 <= card_slot <= 3):
             return False
+        
+        # Check if there's a card detected in this slot
+        # Only validate if not "no action"
+        if card_slot != 4:
+            # Template matcher uses 1-based indexing (1-4), so adjust for 0-based (0-3)
+            template_slot = card_slot + 1
+            
+            # Fallback: If no cards are detected at all, allow any action
+            # This prevents the agent from getting stuck
+            if not self._last_detected_cards:
+                logger.warning(f"No cards detected at all, allowing action in slot {card_slot}")
+                return True
+            
+            if template_slot not in self._last_detected_cards:
+                logger.warning(f"No card detected in slot {card_slot} (template slot {template_slot}). Available slots: {list(self._last_detected_cards.keys())}")
+                # Allow action anyway to prevent getting stuck
+                return True
+            
+            # Check if the detected card is valid
+            detected_card = self._last_detected_cards[template_slot]
+            if not detected_card:
+                logger.warning(f"No card detected in slot {card_slot} (template slot {template_slot})")
+                return True  # Allow action to prevent getting stuck
+            
+            # Template matcher returns 'card_id', not 'card_name'
+            if 'card_id' not in detected_card:
+                logger.warning(f"Invalid card detection in slot {card_slot} (template slot {template_slot}): {detected_card}")
+                return True  # Allow action to prevent getting stuck
         
         # Validate grid coordinates
         if not (0 <= grid_x < 32) or not (0 <= grid_y < 18):
             return False
         
-        # Check if we can afford the card (simplified check)
-        # In a full implementation, we would check the current elixir
-        # against the card cost from the detected cards
+        # Check if the card is actually detected
+        template_slot = card_slot + 1
+        detected_card = self._last_detected_cards.get(template_slot)
+        if not detected_card or 'card_id' not in detected_card:
+            logger.warning(f"Card slot {card_slot} is not detected in hand")
+            return False
+        
+        # Check if we can afford the card
+        # Get current elixir from state
+        current_elixir = 0
+        if hasattr(self, '_current_state') and self._current_state is not None:
+            current_elixir = self._current_state[0]  # Elixir is at index 0
+        
+        # Get card cost from detected card
+        card_id = detected_card['card_id']
+        if card_id in self._card_costs:
+            if current_elixir < self._card_costs[card_id]:
+                logger.warning(f"Not enough elixir for {card_id} (need {self._card_costs[card_id]}, have {current_elixir})")
+                return False
         
         return True
     
@@ -503,8 +645,13 @@ class BootstrapClashRoyaleEnv(gym.Env):
             True if action was executed successfully, False otherwise
         """
         try:
+            # Handle "no action" case - don't execute anything
+            if card_slot == 4:
+                return True
+            
+            # Convert 0-based slot to 1-based for executor (template matcher uses 1-based)
             action = {
-                'card_slot': card_slot,
+                'card_slot': card_slot + 1,  # Convert to 1-based (1-4)
                 'grid_x': grid_x,
                 'grid_y': grid_y
             }
@@ -560,20 +707,28 @@ class BootstrapClashRoyaleEnv(gym.Env):
             # Enemy tower damage (positive reward)
             enemy_damage = 0
             for i in range(3):
-                prev_health = prev_tower_health['enemy'][i] if i < len(prev_tower_health['enemy']) else 0
-                curr_health = current_tower_health['enemy'][i] if i < len(current_tower_health['enemy']) else 0
-                damage = prev_health - curr_health
-                enemy_damage += max(0, damage)
+                try:
+                    prev_health = int(prev_tower_health['enemy'][i]) if i < len(prev_tower_health['enemy']) else 0
+                    curr_health = int(current_tower_health['enemy'][i]) if i < len(current_tower_health['enemy']) else 0
+                    damage = prev_health - curr_health
+                    enemy_damage += max(0, damage)
+                except (TypeError, ValueError, IndexError):
+                    # Skip if we can't parse the health value
+                    continue
             
             reward += enemy_damage * 0.1
             
             # Friendly tower damage (negative reward)
             friendly_damage = 0
             for i in range(3):
-                prev_health = prev_tower_health['friendly'][i] if i < len(prev_tower_health['friendly']) else 0
-                curr_health = current_tower_health['friendly'][i] if i < len(current_tower_health['friendly']) else 0
-                damage = prev_health - curr_health
-                friendly_damage += max(0, damage)
+                try:
+                    prev_health = int(prev_tower_health['friendly'][i]) if i < len(prev_tower_health['friendly']) else 0
+                    curr_health = int(current_tower_health['friendly'][i]) if i < len(current_tower_health['friendly']) else 0
+                    damage = prev_health - curr_health
+                    friendly_damage += max(0, damage)
+                except (TypeError, ValueError, IndexError):
+                    # Skip if we can't parse the health value
+                    continue
             
             reward -= friendly_damage * 0.1
         
@@ -584,6 +739,10 @@ class BootstrapClashRoyaleEnv(gym.Env):
             friendly_king_health = current_tower_health['friendly'][2] if len(current_tower_health['friendly']) > 2 else 0
             enemy_king_health = current_tower_health['enemy'][2] if len(current_tower_health['enemy']) > 2 else 0
             
+            # Debug: Log tower health
+            logger.info(f"Tower health - Friendly: {friendly_king_health}, Enemy: {enemy_king_health}")
+            
+            # Only terminate if a king tower is actually destroyed (health <= 0)
             if friendly_king_health <= 0:
                 # Loss
                 reward -= 1.0
@@ -602,7 +761,15 @@ class BootstrapClashRoyaleEnv(gym.Env):
         # Check for timeout (truncated)
         if self._match_start_time and (time.time() - self._match_start_time) > 300:  # 5 minutes
             truncated = True
-            logger.info("Game ended - Timeout")
+            logger.info(f"Game ended - Timeout after {time.time() - self._match_start_time:.2f} seconds")
+        else:
+            # Debug: Log match time
+            if self._match_start_time:
+                match_time = time.time() - self._match_start_time
+                logger.info(f"Match time: {match_time:.2f} seconds")
+        
+        # Debug: Log final reward and termination status
+        logger.info(f"Final reward: {reward}, terminated: {terminated}, truncated: {truncated}")
         
         return reward, terminated, truncated
     

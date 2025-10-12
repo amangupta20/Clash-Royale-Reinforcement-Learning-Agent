@@ -14,6 +14,7 @@ paddleocr==2.7.3
 onnx
 onnxruntime
 paddle2onnx
-
+tensorboard
+stable-baselines3
 # Optional / helpful
 # opencv-python uncomment if you want to use cv2 cpu version

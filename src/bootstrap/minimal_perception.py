@@ -337,7 +337,7 @@ class MinimalPerception:
         
         processing_time = (time.perf_counter() - overall_start) * 1000
         print(f"TOWER HEALTH OCR (PARALLEL): {processing_time:.2f}ms (avg {processing_time/len(all_tower_rois):.1f}ms per tower)")
-        print(f"  Expected speedup: 3.84x vs sequential (~350ms → ~91ms)")
+            
         
         return {
             'friendly': friendly_health,

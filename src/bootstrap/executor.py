@@ -231,6 +231,12 @@ class BootstrapActionExecutor(BaseActionExecutor):
             grid_x = action['grid_x']
             grid_y = action['grid_y']
             
+            # Handle "no action" (card_slot = 4)
+            if card_slot == 4:
+                execution_time = (time.perf_counter() - start_time) * 1000
+                logger.info(f"No action executed in {execution_time:.2f}ms")
+                return True
+            
             # Convert card slot (0-3) to display card slot (1-4)
             display_card_slot = card_slot + 1
             
@@ -313,11 +319,16 @@ class BootstrapActionExecutor(BaseActionExecutor):
             logger.error(f"Missing required keys in action: {action}")
             return False
         
-        # Validate card_slot (0-3 for 4 visible cards in hand)
+        # Validate card_slot (0-3 for 4 visible cards in hand, 4 for no action)
         card_slot = action['card_slot']
-        if not isinstance(card_slot, int) or not (0 <= card_slot <= 3):
-            logger.error(f"Invalid card_slot: {card_slot}. Must be integer 0-3")
+        if not isinstance(card_slot, int) or not (0 <= card_slot <= 4):
+            logger.error(f"Invalid card_slot: {card_slot}. Must be integer 0-4")
             return False
+        
+        # Handle "no action" (card_slot = 4)
+        if card_slot == 4:
+            logger.info("No action selected, skipping card deployment")
+            return True
         
         # Validate grid_x (0-31)
         grid_x = action['grid_x']
