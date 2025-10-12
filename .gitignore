@@ -23,3 +23,4 @@ inference/*_onnx/
 debug_ocr_*
 test/images
 logs
+artifacts

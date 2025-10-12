@@ -130,6 +130,9 @@ class StructuredMLPPolicy(nn.Module, Policy):
         if config is None:
             config = PolicyConfig()
         
+        # Force CPU device for stability
+        config.device = "cpu"
+        
         Policy.__init__(self, config)
         nn.Module.__init__(self)
         
@@ -288,16 +291,47 @@ class StructuredMLPPolicy(nn.Module, Policy):
             x_action = torch.argmax(x_logits, dim=-1)
             y_action = torch.argmax(y_logits, dim=-1)
         else:
-            # Sample from categorical distribution
+            # Enhanced exploration with temperature scaling and entropy
+            
+            # Apply temperature scaling to increase randomness
+            temperature = 1.2  # Higher temperature = more randomness
+            card_probs = F.softmax(masked_card_logits / temperature, dim=-1)
+            x_probs = F.softmax(x_logits / temperature, dim=-1)
+            y_probs = F.softmax(y_logits / temperature, dim=-1)
+            
             # Handle case where all card logits are masked
             if torch.all(masked_card_logits == float('-inf')):
                 # If all cards are masked, select randomly
                 card_action = torch.randint(0, self.card_slots, (1,), device=self.device).squeeze(-1)
+                card_probs = torch.ones_like(card_probs) / self.card_slots  # Uniform distribution
             else:
-                card_action = torch.multinomial(F.softmax(masked_card_logits, dim=-1), 1).squeeze(-1)
+                # Add entropy bonus for more exploration
+                card_entropy = -torch.sum(card_probs * torch.log(card_probs + 1e-8))
+                entropy_bonus = 0.1 * card_entropy  # Scale the entropy bonus
+                card_probs = F.softmax(masked_card_logits / temperature + entropy_bonus, dim=-1)
+                card_action = torch.multinomial(card_probs, 1).squeeze(-1)
             
-            x_action = torch.multinomial(F.softmax(x_logits, dim=-1), 1).squeeze(-1)
-            y_action = torch.multinomial(F.softmax(y_logits, dim=-1), 1).squeeze(-1)
+            # For grid positions, add spatial bias to encourage exploration
+            # Add slight bias to avoid always selecting the same position
+            x_bias = torch.randn_like(x_logits) * 0.1  # Small random bias
+            y_bias = torch.randn_like(y_logits) * 0.1  # Small random bias
+            
+            x_probs = F.softmax((x_logits + x_bias) / temperature, dim=-1)
+            y_probs = F.softmax((y_logits + y_bias) / temperature, dim=-1)
+            
+            # Add entropy bonus for grid positions as well
+            x_entropy = -torch.sum(x_probs * torch.log(x_probs + 1e-8))
+            y_entropy = -torch.sum(y_probs * torch.log(y_probs + 1e-8))
+            
+            x_entropy_bonus = 0.05 * x_entropy
+            y_entropy_bonus = 0.05 * y_entropy
+            
+            x_probs = F.softmax((x_logits + x_bias) / temperature + x_entropy_bonus, dim=-1)
+            y_probs = F.softmax((y_logits + y_bias) / temperature + y_entropy_bonus, dim=-1)
+            
+            # Sample actions
+            x_action = torch.multinomial(x_probs, 1).squeeze(-1)
+            y_action = torch.multinomial(y_probs, 1).squeeze(-1)
         
         # Convert to numpy
         action = np.array([card_action.item(), x_action.item(), y_action.item()])
@@ -312,7 +346,8 @@ class StructuredMLPPolicy(nn.Module, Policy):
                 'card': F.softmax(masked_card_logits, dim=-1).detach().cpu().numpy(),
                 'x': F.softmax(x_logits, dim=-1).detach().cpu().numpy(),
                 'y': F.softmax(y_logits, dim=-1).detach().cpu().numpy()
-            }
+            },
+            'exploration_temperature': temperature
         }
         
         return action, info

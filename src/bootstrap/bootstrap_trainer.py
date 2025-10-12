@@ -414,6 +414,14 @@ class CheckpointCallback(BaseCallback):
         except:
             self.git_sha = "unknown"
     
+    def set_training_env(self, training_env):
+        """Set the training environment for the callback."""
+        self.training_env = training_env
+    
+    def set_model(self, model):
+        """Set the model for the callback."""
+        self.model = model
+    
     def _on_step(self) -> bool:
         """Called at each step."""
         if self.n_calls % self.save_freq == 0:
@@ -430,6 +438,9 @@ class CheckpointCallback(BaseCallback):
                 'episode_length': float(np.mean(self.locals.get('episode_lengths', [0])))
             }
             
+            # Ensure directory exists
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            
             # Save model
             self.model.save(str(checkpoint_path))
             
@@ -437,8 +448,17 @@ class CheckpointCallback(BaseCallback):
             with open(f"{checkpoint_path}_metadata.json", 'w') as f:
                 json.dump(metadata, f, indent=2)
             
+            # Also save as best model for easy access
+            best_model_path = self.save_path / f"best_model_latest"
+            self.model.save(str(best_model_path))
+            
+            # Save metadata for best model
+            with open(f"{best_model_path}_metadata.json", 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
             if self.verbose > 0:
                 logger.info(f"Saved checkpoint at step {self.n_calls} to {checkpoint_path}")
+                logger.info(f"Also saved as best model: {best_model_path}")
         
         return True
 

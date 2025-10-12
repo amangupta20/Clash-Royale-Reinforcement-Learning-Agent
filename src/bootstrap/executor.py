@@ -81,16 +81,16 @@ class BootstrapActionExecutor(BaseActionExecutor):
             "width": 1920,
             "height": 1080,
             "card_positions": {
-                1: (215, 1785),  # Card 1 (far left)
-                2: (409, 1785),  # Card 2 (left-middle)
-                3: (600, 1785),  # Card 3 (right-middle)
-                4: (794, 1785),  # Card 4 (far right)
+                1: (320, 1785),  # Card 1 (far left)
+                2: (520, 1785),  # Card 2 (left-middle)
+                3: (750, 1785),  # Card 3 (right-middle)
+                4: (950, 1785),  # Card 4 (far right)
             },
             "arena_bounds": {
-                "left": 60,
-                "right": 1860,
-                "top": 360,
-                "bottom": 1020
+                "left": 0,
+                "right": 1080,
+                "top": 505,
+                "bottom": 1440
             }
         },
         "1280x720": {

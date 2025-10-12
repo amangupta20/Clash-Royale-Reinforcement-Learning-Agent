@@ -41,7 +41,7 @@ def test_live_execution():
         
         # Test actions (these will actually execute in the game)
         test_actions = [
-            {'card_slot': 0, 'grid_x': 16, 'grid_y': 8},   # Center of arena
+            {'card_slot': 3, 'grid_x': 16, 'grid_y': 2},   # Center of arena
             {'card_slot': 1, 'grid_x': 8, 'grid_y': 5},    # Left side
             {'card_slot': 2, 'grid_x': 24, 'grid_y': 12},  # Right side
         ]

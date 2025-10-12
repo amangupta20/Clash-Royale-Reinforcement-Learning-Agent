@@ -63,6 +63,10 @@ class EnvironmentConfig:
     # Game settings
     card_names: List[str] = None
     
+    # Manual outcome input settings for Phase 0
+    manual_outcome_input: bool = True
+    outcome_check_delay_seconds: int = 120
+    
     def __post_init__(self):
         """Initialize default card names if not provided."""
         if self.card_names is None:
@@ -165,6 +169,11 @@ class BootstrapClashRoyaleEnv(gym.Env):
         self._last_tower_health = None
         self._step_count = 0
         self._episode_count = 0
+        
+        # Manual win/loss tracking for Phase 0
+        self._manual_outcome_input = self.config.manual_outcome_input
+        self._outcome_check_delay = self.config.outcome_check_delay_seconds
+        self._pending_outcome = None
         
         # Performance tracking
         self._step_times = []
@@ -274,7 +283,10 @@ class BootstrapClashRoyaleEnv(gym.Env):
             Tuple of (observation, reward, terminated, truncated, info)
         """
         if self._game_phase == GamePhase.ENDED:
-            raise RuntimeError("Environment is done. Call reset() before step().")
+            # Instead of raising an error, reset the environment automatically
+            logger.info("Environment was in ENDED state, auto-resetting...")
+            obs, info = self.reset(seed=None, options=None)
+            return obs, 0.0, False, False, info
         
         step_start_time = time.perf_counter()
         self._step_count += 1
@@ -306,7 +318,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             # Check for elixir penalty (elixir = 10)
             elixir_penalty = 0
-            if self._current_state[0] >= 10:  # Elixir is at index 0
+            if self._current_state is not None and len(self._current_state) > 0 and self._current_state[0] >= 10:
                 elixir_penalty = -0.01
             
             # Handle "no action" (card_slot = 4)
@@ -368,7 +380,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             # Add elixir penalty
             elixir_penalty = 0
-            if self._current_state[0] >= 10:  # Elixir is at index 0
+            if self._current_state is not None and len(self._current_state) > 0 and self._current_state[0] >= 10:
                 elixir_penalty = -0.01
             reward += elixir_penalty
             
@@ -466,18 +478,30 @@ class BootstrapClashRoyaleEnv(gym.Env):
         """Navigate from menu to battle and wait for match start."""
         logger.info("Navigating to battle...")
         
-        # This is a simplified implementation
-        # In a full implementation, we would:
-        # 1. Detect if we're in the main menu
-        # 2. Click the battle button
-        # 3. Wait for match to start
-        # 4. Detect when we're in the playing phase
+        # This is a simplified implementation for Phase 0
+        # In Phase 0, we assume the user will manually navigate to battles
+        # or the agent will train in whatever state it finds
         
-        # For Phase 0, we'll assume we're already in a match or can start one
+        # Set to playing phase to allow actions
         self._game_phase = GamePhase.PLAYING
         self._match_start_time = time.time()
         
+        # Reset termination flags
+        self._pending_outcome = None
+        
+        # Ensure action cooldown is reset
+        self._last_action_time = 0.0
+        
         logger.info("Navigation completed - ready to play")
+        logger.info("Note: Make sure Clash Royale is in a playable state")
+        
+        # Get current state to log elixir and cards
+        try:
+            current_state = self._get_current_state()
+            logger.info(f"Elixir: {current_state[0]}")
+            logger.info(f"Detected cards: {np.sum(current_state[13:17])}")
+        except Exception as e:
+            logger.warning(f"Could not get current state for logging: {e}")
     
     def _get_current_state(self) -> np.ndarray:
         """
@@ -620,7 +644,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
         # Check if we can afford the card
         # Get current elixir from state
         current_elixir = 0
-        if hasattr(self, '_current_state') and self._current_state is not None:
+        if hasattr(self, '_current_state') and self._current_state is not None and len(self._current_state) > 0:
             current_elixir = self._current_state[0]  # Elixir is at index 0
         
         # Get card cost from detected card
@@ -754,6 +778,52 @@ class BootstrapClashRoyaleEnv(gym.Env):
                 terminated = True
                 logger.info("Game ended - Victory")
         
+        # Manual outcome input for Phase 0 (when automatic detection is not available)
+        if self._manual_outcome_input and not terminated:
+            # Check if we should prompt for manual outcome
+            if self._match_start_time:
+                match_duration = time.time() - self._match_start_time
+                # Log match time periodically
+                if self._step_count % 100 == 0:  # Every 100 steps
+                    logger.info(f"Match duration: {match_duration:.1f}s, check at {self._outcome_check_delay}s")
+                
+                # Check if match has been running long enough to potentially be finished
+                if match_duration > self._outcome_check_delay:  # Use configurable delay
+                    if self._pending_outcome is None:
+                        logger.info("=" * 60)
+                        logger.info(f"MANUAL OUTCOME INPUT REQUIRED (after {match_duration:.1f}s)")
+                        logger.info("=" * 60)
+                        logger.info("Please enter the game outcome:")
+                        logger.info("  1 - Win")
+                        logger.info("  2 - Loss")
+                        logger.info("  3 - Continue playing")
+                        logger.info("  0 - Skip/Cancel")
+                        logger.info("=" * 60)
+                        
+                        outcome = self._request_manual_outcome()
+                        if outcome is not None:
+                            if outcome == 'win':
+                                reward += 1.0
+                                terminated = True
+                                logger.info("Game ended - Manual Victory Input")
+                            elif outcome == 'loss':
+                                reward -= 1.0
+                                terminated = True
+                                logger.info("Game ended - Manual Defeat Input")
+                            elif outcome == 'continue':
+                                # Continue playing and reset timer
+                                self._match_start_time = time.time()  # Reset timer
+                                logger.info("Continuing play - timer reset")
+                            elif outcome == 'skip':
+                                # Skip this time and reset timer
+                                self._match_start_time = time.time()  # Reset timer
+                                logger.info("Skipped input - timer reset")
+                            self._pending_outcome = outcome
+            else:
+                # No match start time, set it now
+                self._match_start_time = time.time()
+                logger.info("Match timer started - manual input will be available after delay")
+        
         # Small penalty for failed actions
         if not action_success:
             reward -= 0.05
@@ -794,6 +864,59 @@ class BootstrapClashRoyaleEnv(gym.Env):
             metrics['card_matcher'] = self.card_matcher.get_performance_metrics()
         
         return metrics
+    
+    def _request_manual_outcome(self) -> Optional[str]:
+        """
+        Request manual outcome input from user for Phase 0 training.
+        
+        Returns:
+            'win', 'loss', 'continue', or None
+        """
+        logger.info("=" * 50)
+        logger.info("MANUAL OUTCOME INPUT REQUIRED")
+        logger.info("=" * 50)
+        logger.info("Please enter the game outcome:")
+        logger.info("  1 - Win")
+        logger.info("  2 - Loss")
+        logger.info("  3 - Continue playing")
+        logger.info("  0 - Skip/Cancel")
+        logger.info("=" * 50)
+        
+        try:
+            # Try to get input from user
+            user_input = input("Enter outcome (1/2/3/0): ").strip()
+            
+            if user_input == '1':
+                return 'win'
+            elif user_input == '2':
+                return 'loss'
+            elif user_input == '3':
+                return 'continue'
+            elif user_input == '0':
+                return None
+            else:
+                logger.warning(f"Invalid input: {user_input}. Skipping manual outcome.")
+                return None
+                
+        except (EOFError, KeyboardInterrupt):
+            logger.info("Input interrupted. Skipping manual outcome.")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting manual outcome: {e}")
+            return None
+    
+    def set_manual_outcome(self, outcome: str) -> None:
+        """
+        Set manual outcome programmatically (for testing or automated input).
+        
+        Args:
+            outcome: 'win', 'loss', or 'continue'
+        """
+        if outcome in ['win', 'loss', 'continue']:
+            self._pending_outcome = outcome
+            logger.info(f"Manual outcome set to: {outcome}")
+        else:
+            logger.warning(f"Invalid outcome: {outcome}")
 
 
 # Phase 0 uses simplified BootstrapClashRoyaleEnv; full environment with advanced features added in Phase 1 (T023)
