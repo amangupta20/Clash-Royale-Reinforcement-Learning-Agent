@@ -94,6 +94,10 @@ class Phase0TensorBoardCallback(BaseCallback):
         self.model_weights_history = {}
         self.gradient_norms = deque(maxlen=100)
         
+        # Card ID tracking
+        self.card_id_usage = defaultdict(int)  # Track usage of each card ID
+        self.card_slot_to_id_map = {}  # Map card slots to their IDs
+        
         # Custom metrics
         self.phase0_metrics = defaultdict(list)
         
@@ -217,11 +221,33 @@ class Phase0TensorBoardCallback(BaseCallback):
                     if 0 <= grid_x < 32 and 0 <= grid_y < 18:
                         self.action_heatmap[grid_x, grid_y] += 1
                 
-                # Update card usage
+                # Update card usage and track card ID if action is valid
                 if len(actions) >= 1:
                     card_slot = actions[0]
                     if 0 <= card_slot < 5:
                         self.card_usage[card_slot] += 1
+                        
+                        # Only track card ID if the action is valid (card_slot < 4)
+                        # Use the executor's validate function to check if action is valid
+                        if card_slot < 4 and hasattr(self.training_env, 'envs'):
+                            env = self.training_env.envs[0]
+                            if hasattr(env, 'executor') and hasattr(env.executor, '_validate_action'):
+                                action_dict = {
+                                    'card_slot': card_slot,
+                                    'grid_x': actions[1],
+                                    'grid_y': actions[2]
+                                }
+                                if env.executor._validate_action(action_dict):
+                                    # Action is valid, get card ID from environment
+                                    if hasattr(env, '_last_detected_cards'):
+                                        # Convert 0-based to 1-based for template matcher
+                                        template_slot = card_slot + 1
+                                        if template_slot in env._last_detected_cards:
+                                            detected_card = env._last_detected_cards[template_slot]
+                                            if detected_card and 'card_id' in detected_card:
+                                                card_id = detected_card['card_id']
+                                                self.card_id_usage[card_id] += 1
+                                                self.card_slot_to_id_map[card_slot] = card_id
         
         # Get reward info
         if 'rewards' in self.locals:
@@ -283,6 +309,19 @@ class Phase0TensorBoardCallback(BaseCallback):
             for i, prob in enumerate(card_probs):
                 card_name = f"Card_{i}" if i < 4 else "No_Action"
                 self.writer.add_scalar(f'CardUsage/{card_name}', prob, step)
+                
+                # Add card ID info if available
+                if i < 4 and i in self.card_slot_to_id_map:
+                    card_id = self.card_slot_to_id_map[i]
+                    self.writer.add_scalar(f'CardUsage/Card_{i}_ID_{card_id}', prob, step)
+        
+        # Card ID usage distribution
+        if self.card_id_usage:
+            total_card_id_uses = sum(self.card_id_usage.values())
+            if total_card_id_uses > 0:
+                for card_id, count in self.card_id_usage.items():
+                    prob = count / total_card_id_uses
+                    self.writer.add_scalar(f'CardIDUsage/ID_{card_id}', prob, step)
         
         # Training metrics from SB3
         if hasattr(self.model, 'logger'):
@@ -349,12 +388,21 @@ class Phase0TensorBoardCallback(BaseCallback):
         
         # Card selection frequency
         if np.sum(self.card_usage) > 0:
-            fig, ax = plt.subplots(figsize=(10, 6))
+            fig, ax = plt.subplots(figsize=(12, 6))
             
             card_labels = ['Card 0', 'Card 1', 'Card 2', 'Card 3', 'No Action']
             card_counts = self.card_usage
             
-            bars = ax.bar(card_labels, card_counts, color=['blue', 'green', 'red', 'purple', 'gray'])
+            # Create bar colors
+            colors = ['blue', 'green', 'red', 'purple', 'gray']
+            
+            # Add card ID information to labels if available
+            for i in range(4):
+                if i in self.card_slot_to_id_map:
+                    card_id = self.card_slot_to_id_map[i]
+                    card_labels[i] = f'Card {i} (ID: {card_id})'
+            
+            bars = ax.bar(card_labels, card_counts, color=colors)
             ax.set_xlabel('Card Selection')
             ax.set_ylabel('Frequency')
             ax.set_title(f'Card Selection Frequency - Step {step}')
@@ -365,7 +413,43 @@ class Phase0TensorBoardCallback(BaseCallback):
                 ax.text(bar.get_x() + bar.get_width()/2., height,
                        f'{int(count)}', ha='center', va='bottom')
             
+            # Rotate x-axis labels for better readability
+            plt.xticks(rotation=45, ha='right')
+            
             self.writer.add_figure('Cards/SelectionFrequency', fig, step)
+            plt.close(fig)
+        
+        # Card ID usage frequency
+        if self.card_id_usage:
+            fig, ax = plt.subplots(figsize=(14, 7))
+            
+            card_ids = list(self.card_id_usage.keys())
+            card_id_counts = list(self.card_id_usage.values())
+            
+            # Sort by count for better visualization
+            sorted_indices = np.argsort(card_id_counts)[::-1]
+            sorted_card_ids = [card_ids[i] for i in sorted_indices]
+            sorted_counts = [card_id_counts[i] for i in sorted_indices]
+            
+            bars = ax.bar(range(len(sorted_card_ids)), sorted_counts, color='skyblue')
+            ax.set_xlabel('Card ID')
+            ax.set_ylabel('Frequency')
+            ax.set_title(f'Card ID Usage Frequency - Step {step}')
+            
+            # Set x-axis labels to card IDs
+            ax.set_xticks(range(len(sorted_card_ids)))
+            ax.set_xticklabels(sorted_card_ids)
+            
+            # Add value labels on bars
+            for bar, count in zip(bars, sorted_counts):
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{int(count)}', ha='center', va='bottom')
+            
+            # Rotate x-axis labels for better readability
+            plt.xticks(rotation=45, ha='right')
+            
+            self.writer.add_figure('Cards/CardIDFrequency', fig, step)
             plt.close(fig)
     
     def _log_model_metrics(self, step: int) -> None:

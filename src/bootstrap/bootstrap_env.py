@@ -344,7 +344,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             # Validate action
             if not self._validate_action(card_slot, grid_x, grid_y):
                 logger.warning(f"Invalid action: [{card_slot}, {grid_x}, {grid_y}]")
-                reward = -0.1 + elixir_penalty  # Invalid action penalty + elixir penalty
+                reward = -1 + elixir_penalty  # Invalid action penalty + elixir penalty
                 terminated = False
                 truncated = False
                 obs = self._get_current_state()
@@ -364,8 +364,8 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             # Execute action
             action_success = self._execute_action(card_slot, grid_x, grid_y)
-            if card_slot != 4: # Only wait if we actually played a card
-                time.sleep(1)
+           # if card_slot != 4: # Only wait if we actually played a card
+               # time.sleep(1)
 
             
             # Get current state
@@ -381,7 +381,7 @@ class BootstrapClashRoyaleEnv(gym.Env):
             if self._current_state is not None and len(self._current_state) > 0 and self._current_state[0] >= 10:
                 elixir_penalty = -0.01
             reward += elixir_penalty
-            
+            reward += 1
             # Debug: Log reward and termination
             logger.info(f"Reward: {reward}, Terminated: {terminated}, Truncated: {truncated}")
             
