@@ -81,6 +81,12 @@ class Phase0TensorBoardCallback(BaseCallback):
         self.episode_lengths = []
         self.win_history = deque(maxlen=100)
         
+        # Enhanced reward tracking
+        self.reward_components = defaultdict(list)  # Track different reward components
+        self.cumulative_rewards = deque(maxlen=1000)  # Track cumulative rewards
+        self.recent_rewards = deque(maxlen=100)  # Track very recent rewards
+        self.reward_timesteps = deque(maxlen=1000)  # Track timesteps for rewards
+        
         # Performance tracking
         self.step_times = deque(maxlen=1000)
         self.action_latencies = deque(maxlen=1000)
@@ -255,12 +261,36 @@ class Phase0TensorBoardCallback(BaseCallback):
             if isinstance(rewards, (list, np.ndarray)):
                 reward = rewards[0] if rewards else 0
                 self.reward_history.append(reward)
+                self.reward_timesteps.append(self.num_timesteps)
+                
+                # Track very recent rewards
+                self.recent_rewards.append(reward)
+                
+                # Track cumulative rewards
+                if self.cumulative_rewards:
+                    last_cumulative = self.cumulative_rewards[-1]
+                    self.cumulative_rewards.append(last_cumulative + reward)
+                else:
+                    self.cumulative_rewards.append(reward)
                 
                 # Track wins (reward > 0.5 indicates win)
                 if reward > 0.5:
                     self.win_history.append(1)
+                    self.reward_components['wins'].append(reward)
                 elif reward < -0.5:
                     self.win_history.append(0)
+                    self.reward_components['losses'].append(reward)
+                else:
+                    self.reward_components['draws'].append(reward)
+                
+                # Track reward magnitude
+                self.reward_components['magnitudes'].append(abs(reward))
+                
+                # Track positive and negative rewards separately
+                if reward > 0:
+                    self.reward_components['positive'].append(reward)
+                else:
+                    self.reward_components['negative'].append(reward)
         
         # Track step timing
         step_start_time = getattr(self, '_last_step_time', time.time())
@@ -288,6 +318,44 @@ class Phase0TensorBoardCallback(BaseCallback):
             # Log Phase 0 specific target
             target_win_rate = 0.35
             self.writer.add_scalar('Performance/WinRateGap', target_win_rate - win_rate, step)
+        
+        # Enhanced reward tracking
+        if self.reward_history:
+            recent_rewards = list(self.reward_history)[-100:]
+            self.writer.add_scalar('Rewards/Mean', np.mean(recent_rewards), step)
+            self.writer.add_scalar('Rewards/Std', np.std(recent_rewards), step)
+            self.writer.add_scalar('Rewards/Min', np.min(recent_rewards), step)
+            self.writer.add_scalar('Rewards/Max', np.max(recent_rewards), step)
+            
+            # Recent rewards (last 10)
+            if len(self.recent_rewards) >= 1:
+                recent_10 = list(self.recent_rewards)
+                self.writer.add_scalar('Rewards/RecentMean', np.mean(recent_10), step)
+                self.writer.add_scalar('Rewards/RecentStd', np.std(recent_10), step)
+            
+            # Cumulative rewards
+            if self.cumulative_rewards:
+                self.writer.add_scalar('Rewards/Cumulative', self.cumulative_rewards[-1], step)
+            
+            # Reward components
+            for component, values in self.reward_components.items():
+                if values:
+                    self.writer.add_scalar(f'Rewards/{component.capitalize()}', np.mean(values[-100:]), step)
+            
+            # Positive vs Negative reward ratio
+            if 'positive' in self.reward_components and 'negative' in self.reward_components:
+                positive_count = len(self.reward_components['positive'][-100:])
+                negative_count = len(self.reward_components['negative'][-100:])
+                total_count = positive_count + negative_count
+                if total_count > 0:
+                    positive_ratio = positive_count / total_count
+                    self.writer.add_scalar('Rewards/PositiveRatio', positive_ratio, step)
+            
+            # Reward magnitude statistics
+            if 'magnitudes' in self.reward_components and self.reward_components['magnitudes']:
+                magnitudes = self.reward_components['magnitudes'][-100:]
+                self.writer.add_scalar('Rewards/MeanMagnitude', np.mean(magnitudes), step)
+                self.writer.add_scalar('Rewards/MagnitudeStd', np.std(magnitudes), step)
         
         # Elixir metrics
         if self.elixir_history:
@@ -341,10 +409,16 @@ class Phase0TensorBoardCallback(BaseCallback):
             elixir_array = np.array(list(self.elixir_history))
             self.writer.add_histogram('Elixir/Distribution', elixir_array, step)
         
-        # Reward distribution
+        # Enhanced reward distributions
         if self.reward_history:
             reward_array = np.array(list(self.reward_history))
             self.writer.add_histogram('Rewards/Distribution', reward_array, step)
+            
+            # Log reward components separately
+            for component, values in self.reward_components.items():
+                if values:
+                    component_array = np.array(values)
+                    self.writer.add_histogram(f'Rewards/{component.capitalize()}Distribution', component_array, step)
         
         # State vector distribution
         if self.state_vectors:
@@ -354,6 +428,16 @@ class Phase0TensorBoardCallback(BaseCallback):
                 self.writer.add_histogram('State/Elixir', state_array[:, 0], step)
                 self.writer.add_histogram('State/MatchTime', state_array[:, 1], step)
                 self.writer.add_histogram('State/TowerHealth', state_array[:, 2:5].flatten(), step)
+        
+        # Recent rewards distribution
+        if self.recent_rewards:
+            recent_array = np.array(list(self.recent_rewards))
+            self.writer.add_histogram('Rewards/RecentDistribution', recent_array, step)
+        
+        # Cumulative rewards distribution
+        if self.cumulative_rewards:
+            cumulative_array = np.array(list(self.cumulative_rewards))
+            self.writer.add_histogram('Rewards/CumulativeDistribution', cumulative_array, step)
     
     def _log_heatmaps(self, step: int) -> None:
         """Log heatmaps to TensorBoard."""
@@ -450,6 +534,139 @@ class Phase0TensorBoardCallback(BaseCallback):
             plt.xticks(rotation=45, ha='right')
             
             self.writer.add_figure('Cards/CardIDFrequency', fig, step)
+            plt.close(fig)
+        
+        # Reward visualization
+        self._log_reward_visualizations(step)
+    
+    def _log_reward_visualizations(self, step: int) -> None:
+        """Create and log reward visualization charts."""
+        # Reward over time chart
+        if self.reward_history and len(self.reward_history) > 1:
+            fig, ax = plt.subplots(figsize=(14, 8))
+            
+            # Get recent rewards for plotting
+            recent_rewards = list(self.reward_history)[-500:]
+            recent_timesteps = list(self.reward_timesteps)[-500:]
+            
+            # Plot reward over time
+            ax.plot(recent_timesteps, recent_rewards, 'b-', alpha=0.7, linewidth=1)
+            ax.scatter(recent_timesteps, recent_rewards, c=recent_rewards, cmap='RdYlGn',
+                      s=10, alpha=0.8, edgecolors='black', linewidth=0.5)
+            
+            # Add zero line for reference
+            ax.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+            
+            # Add moving average
+            if len(recent_rewards) >= 10:
+                window_size = min(20, len(recent_rewards) // 10)
+                moving_avg = []
+                for i in range(len(recent_rewards)):
+                    start_idx = max(0, i - window_size + 1)
+                    end_idx = i + 1
+                    moving_avg.append(np.mean(recent_rewards[start_idx:end_idx]))
+                
+                ax.plot(recent_timesteps, moving_avg, 'r-', linewidth=2,
+                       label=f'Moving Avg ({window_size} steps)')
+                ax.legend()
+            
+            ax.set_xlabel('Training Steps')
+            ax.set_ylabel('Reward')
+            ax.set_title(f'Reward Progress Over Time - Step {step}')
+            ax.grid(True, alpha=0.3)
+            
+            # Set y-axis limits if range is reasonable
+            if recent_rewards:
+                y_min = min(recent_rewards)
+                y_max = max(recent_rewards)
+                margin = (y_max - y_min) * 0.1 or 1.0
+                ax.set_ylim(y_min - margin, y_max + margin)
+            
+            self.writer.add_figure('Rewards/RewardProgress', fig, step)
+            plt.close(fig)
+        
+        # Cumulative reward chart
+        if self.cumulative_rewards and len(self.cumulative_rewards) > 1:
+            fig, ax = plt.subplots(figsize=(12, 6))
+            
+            recent_cumulative = list(self.cumulative_rewards)[-500:]
+            recent_timesteps = list(self.reward_timesteps)[-len(recent_cumulative):]
+            
+            ax.plot(recent_timesteps, recent_cumulative, 'g-', linewidth=2)
+            ax.fill_between(recent_timesteps, recent_cumulative, alpha=0.3, color='green')
+            
+            ax.set_xlabel('Training Steps')
+            ax.set_ylabel('Cumulative Reward')
+            ax.set_title(f'Cumulative Reward Progress - Step {step}')
+            ax.grid(True, alpha=0.3)
+            
+            self.writer.add_figure('Rewards/CumulativeProgress', fig, step)
+            plt.close(fig)
+        
+        # Reward component distribution
+        if self.reward_components:
+            fig, ax = plt.subplots(figsize=(12, 6))
+            
+            components = []
+            counts = []
+            colors = []
+            
+            for component, values in self.reward_components.items():
+                if values:
+                    components.append(component.capitalize())
+                    counts.append(len(values))
+                    if component == 'wins':
+                        colors.append('green')
+                    elif component == 'losses':
+                        colors.append('red')
+                    elif component == 'draws':
+                        colors.append('gray')
+                    elif component == 'positive':
+                        colors.append('lightgreen')
+                    elif component == 'negative':
+                        colors.append('lightcoral')
+                    else:
+                        colors.append('skyblue')
+            
+            if components:
+                bars = ax.bar(components, counts, color=colors)
+                ax.set_xlabel('Reward Component')
+                ax.set_ylabel('Count')
+                ax.set_title(f'Reward Component Distribution - Step {step}')
+                
+                # Add value labels on bars
+                for bar, count in zip(bars, counts):
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{int(count)}', ha='center', va='bottom')
+                
+                # Rotate x-axis labels for better readability
+                plt.xticks(rotation=45, ha='right')
+                
+                self.writer.add_figure('Rewards/ComponentDistribution', fig, step)
+                plt.close(fig)
+        
+        # Reward magnitude distribution
+        if 'magnitudes' in self.reward_components and self.reward_components['magnitudes']:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            magnitudes = self.reward_components['magnitudes']
+            ax.hist(magnitudes, bins=20, color='purple', alpha=0.7, edgecolor='black')
+            ax.set_xlabel('Reward Magnitude')
+            ax.set_ylabel('Frequency')
+            ax.set_title(f'Reward Magnitude Distribution - Step {step}')
+            ax.grid(True, alpha=0.3)
+            
+            # Add statistics text
+            mean_mag = np.mean(magnitudes)
+            median_mag = np.median(magnitudes)
+            std_mag = np.std(magnitudes)
+            
+            stats_text = f'Mean: {mean_mag:.2f}\nMedian: {median_mag:.2f}\nStd: {std_mag:.2f}'
+            ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
+                   verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+            
+            self.writer.add_figure('Rewards/MagnitudeDistribution', fig, step)
             plt.close(fig)
     
     def _log_model_metrics(self, step: int) -> None:
