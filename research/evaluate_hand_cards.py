@@ -34,21 +34,52 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def load_config(path: pathlib.Path) -> dict:
+    """Loads a JSON configuration file.
+
+    Args:
+        path: The path to the configuration file.
+
+    Returns:
+        A dictionary with the configuration data.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def list_image_files(dir_path: pathlib.Path, patterns=(".png", ".jpg", ".jpeg")) -> List[pathlib.Path]:
+    """Lists image files in a directory.
+
+    Args:
+        dir_path: The path to the directory.
+        patterns: A tuple of file extensions to look for.
+
+    Returns:
+        A list of paths to the image files.
+    """
     return [p for p in sorted(dir_path.iterdir()) if p.suffix.lower() in patterns]
 
 
 def ensure_dir(p: pathlib.Path) -> None:
+    """Ensures that a directory exists.
+
+    Args:
+        p: The path to the directory.
+    """
     p.mkdir(parents=True, exist_ok=True)
 
 
 def preprocess_image(img, variant: str):
-    """Return processed image according to variant.
-    Order for gray_div2 follows config guidance: downscale then grayscale.
+    """Returns a processed image according to the specified variant.
+
+    The order of operations for `gray_div2` follows the configuration
+    guidance: downscale first, then convert to grayscale.
+
+    Args:
+        img: The input image.
+        variant: The processing variant to apply.
+
+    Returns:
+        The processed image.
     """
     import cv2  # local import
 
@@ -64,7 +95,15 @@ def preprocess_image(img, variant: str):
 
 
 def preprocess_template(tpl, variant: str):
-    """Preprocess template to match the image processing pipeline."""
+    """Preprocesses a template to match the image processing pipeline.
+
+    Args:
+        tpl: The input template.
+        variant: The processing variant to apply.
+
+    Returns:
+        The preprocessed template.
+    """
     import cv2  # local import
 
     if variant in ("full_rgb", "deck_rgb"):
@@ -79,15 +118,36 @@ def preprocess_template(tpl, variant: str):
 
 
 def _match_one(img, tpl, method):
+    """Performs a single template matching operation.
+
+    Args:
+        img: The input image.
+        tpl: The template image.
+        method: The template matching method to use.
+
+    Returns:
+        The result of `cv2.minMaxLoc`.
+    """
     import cv2
     res = cv2.matchTemplate(img, tpl, method)
     return cv2.minMaxLoc(res)
 
 
 def match_templates(img, templates: List[Tuple[str, any]], method, threshold: float, workers: int = 1):
-    """Run matchTemplate for each template; return list of detections and scores.
+    """Runs `matchTemplate` for each template and returns the detections and scores.
 
-    Returns: list of dicts {name, max_val, max_loc, w, h, passed}
+    Args:
+        img: The input image.
+        templates: A list of tuples, where each tuple contains a template name
+            and its corresponding image.
+        method: The template matching method to use.
+        threshold: The threshold for a detection to be considered a match.
+        workers: The number of parallel workers to use for template matching.
+
+    Returns:
+        A list of dictionaries, where each dictionary represents a detection
+        and contains the template name, maximum correlation value, location,
+        dimensions, and whether it passed the threshold.
     """
     import cv2  # local import
 
@@ -127,6 +187,14 @@ def match_templates(img, templates: List[Tuple[str, any]], method, threshold: fl
 
 
 def draw_detections(img, detections: List[dict], out_path: pathlib.Path, draw_threshold: float):
+    """Draws detections on an image and saves it to a file.
+
+    Args:
+        img: The input image.
+        detections: A list of detection dictionaries.
+        out_path: The path to save the output image.
+        draw_threshold: The threshold for a detection to be drawn.
+    """
     import cv2  # local import
 
     vis = img.copy()
@@ -144,6 +212,15 @@ def draw_detections(img, detections: List[dict], out_path: pathlib.Path, draw_th
 
 
 def _percentile(vals: List[float], p: float) -> float:
+    """Calculates the percentile of a list of values.
+
+    Args:
+        vals: A list of values.
+        p: The percentile to calculate.
+
+    Returns:
+        The calculated percentile.
+    """
     if not vals:
         return 0.0
     s = sorted(vals)
@@ -159,6 +236,23 @@ def _percentile(vals: List[float], p: float) -> float:
 
 def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | None, log_tags: str | None,
              repeats: int = 3, warmup: int = 1, present_k: int | None = None, workers: int = 1, opencv_threads: int | None = None) -> dict:
+    """Runs the evaluation.
+
+    Args:
+        cfg: The configuration dictionary.
+        out_dir: The output directory for artifacts and metrics.
+        log_run: Whether to log the run using `research/log_experiment.py`.
+        log_name: The name/slug for the experiment log entry.
+        log_tags: Comma-separated tags for the experiment log.
+        repeats: The number of repeated runs for timing statistics.
+        warmup: The number of initial repeats to discard as warmup.
+        present_k: The expected number of present cards (top-k).
+        workers: The number of parallel workers for template matching.
+        opencv_threads: The number of threads to force OpenCV to use.
+
+    Returns:
+        A dictionary with the evaluation metrics.
+    """
     import cv2  # local import
 
     ensure_dir(out_dir)
@@ -364,6 +458,11 @@ def run_eval(cfg: dict, out_dir: pathlib.Path, log_run: bool, log_name: str | No
 
 
 def parse_args():
+    """Parses command-line arguments.
+
+    Returns:
+        The parsed arguments.
+    """
     ap = argparse.ArgumentParser(description="Evaluate hand card detection (OpenCV template matching)")
     ap.add_argument("--config", default=str((ROOT / "research" / "configs" / "hand_cards_eval.json").resolve()),
                     help="Path to evaluation config JSON")
@@ -381,6 +480,7 @@ def parse_args():
 
 
 def main():
+    """The main function."""
     args = parse_args()
     cfg_path = pathlib.Path(args.config)
     out_dir = pathlib.Path(args.out)

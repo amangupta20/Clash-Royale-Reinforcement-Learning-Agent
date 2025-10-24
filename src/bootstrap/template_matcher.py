@@ -15,16 +15,22 @@ from typing import List, Dict, Tuple, Optional
 
 
 class TemplateCardMatcher:
+    """A template-based card matcher for hand card detection in Phase 0.
+
+    This class uses OpenCV's template matching with normalized cross-correlation
+    to detect cards in the hand region of the game. It is optimized for
+    performance, aiming for sub-4ms processing time for all four card slots
+    by using parallel processing.
+
+    Attributes:
+        card_names: A list of the 8 card names in the deck.
+        templates: A list of tuples, where each tuple contains a card name and
+            its corresponding template image.
+        executor: A `ThreadPoolExecutor` for parallel template matching.
+        threshold: The confidence threshold for a detection to be considered a
+            match.
     """
-    Template matching for hand card detection in Phase 0.
-    
-    This class uses OpenCV template matching with normalized cross-correlation
-    to detect cards in the hand region. It's optimized for sub-4ms performance
-    on all 4 card slots using parallel processing.
-    
-    Performance Target: <4ms for all matches, >80% accuracy
-    """
-    
+
     # Hand ROI coordinates based on main.py values for 1920x1080 resolution
     # CROP_LEFT = 788, CROP_RIGHT = 675, CROP_TOP = 893, CROP_BOT = 50
     CROP_LEFT = 788
@@ -44,11 +50,10 @@ class TemplateCardMatcher:
     ]
     
     def __init__(self, card_names: List[str]):
-        """
-        Initialize the template card matcher.
-        
+        """Initializes the template card matcher.
+
         Args:
-            card_names: List of 8 card names in the deck
+            card_names: A list of the 8 card names in the deck.
         """
         if not card_names or len(card_names) != 8:
             raise ValueError("Exactly 8 card names required for deck")
@@ -67,11 +72,11 @@ class TemplateCardMatcher:
         self.threshold = 0.7
         
     def _load_templates(self) -> List[Tuple[str, np.ndarray]]:
-        """
-        Load card templates from assets/cards/ directory.
-        
+        """Loads card templates from the assets/cards/ directory.
+
         Returns:
-            List of (card_name, template) tuples
+            A list of tuples, where each tuple contains a card name and its
+            corresponding template image.
         """
         templates = []
         for card_name in self.card_names:
@@ -84,14 +89,14 @@ class TemplateCardMatcher:
         return templates
     
     def _which_slot(self, x: int) -> Optional[int]:
-        """
-        Determine which card slot a detected card belongs to based on x-coordinate.
-        
+        """Determines which card slot a detected card belongs to.
+
         Args:
-            x: X-coordinate of the detected card
-            
+            x: The x-coordinate of the detected card.
+
         Returns:
-            Slot number (1-4) or None if outside all slots
+            The slot number (1-4), or None if the coordinate is outside all
+            slots.
         """
         for i, (x_min, x_max) in enumerate(self.SLOT_RANGES):
             if x_min <= x < x_max:
@@ -99,15 +104,16 @@ class TemplateCardMatcher:
         return None
     
     def _match_single_template(self, game_image: np.ndarray, card_template: Tuple[str, np.ndarray]) -> Tuple[str, float, int]:
-        """
-        Perform template matching for a single card.
-        
+        """Performs template matching for a single card.
+
         Args:
-            game_image: Preprocessed hand region image
-            card_template: (card_name, template) tuple
-            
+            game_image: The preprocessed hand region image.
+            card_template: A tuple containing the card name and its template
+                image.
+
         Returns:
-            (card_name, max_val, x_coord) tuple
+            A tuple containing the card name, the maximum correlation value, and
+            the x-coordinate of the match.
         """
         card_name, template = card_template
         
@@ -120,22 +126,14 @@ class TemplateCardMatcher:
         return card_name, max_val, max_loc[0]
     
     def detect_hand_cards(self, frame: np.ndarray) -> Dict[int, Dict[str, any]]:
-        """
-        Detect cards in the hand ROI using template matching.
-        
+        """Detects cards in the hand ROI using template matching.
+
         Args:
-            frame: Full screen frame in BGR format
-            
+            frame: The full screen frame in BGR format.
+
         Returns:
-            Dictionary mapping slot numbers to detection results:
-            {
-                slot_number: {
-                    'card_id': str or None,
-                    'confidence': float,
-                    'position': (x, y) or None
-                },
-                ...
-            }
+            A dictionary mapping slot numbers to detection results, where each
+            result includes the card ID, confidence, and position.
         """
         overall_start = time.perf_counter()
         
@@ -202,11 +200,10 @@ class TemplateCardMatcher:
         return results
     
     def get_performance_metrics(self) -> Dict[str, float]:
-        """
-        Get performance metrics for the template matcher.
-        
+        """Gets performance metrics for the template matcher.
+
         Returns:
-            Dictionary with performance metrics
+            A dictionary with performance metrics.
         """
         return {
             'threshold': self.threshold,

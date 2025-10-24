@@ -11,19 +11,18 @@ from random_deployment import (
 # This file provides high-level functions for different card deployment strategies.
 # It uses the low-level functions from random_deployment.py to perform the actual deployments.
 
-def run_continuous_deployment(interval_range=(4, 6), num_deployments=None):
-    """
-    Runs a continuous deployment of cards at random intervals.
+def run_continuous_deployment(interval_range: tuple = (4, 6), num_deployments: int | None = None) -> None:
+    """Runs a continuous deployment of cards at random intervals.
 
-    This function will continuously deploy cards until the specified number of deployments
-    is reached, or indefinitely if no number is specified. It can be stopped manually
-    with a KeyboardInterrupt (Ctrl+C).
-    
+    This function will continuously deploy cards until the specified number of
+    deployments is reached, or indefinitely if no number is specified. It can be
+    stopped manually with a KeyboardInterrupt (Ctrl+C).
+
     Args:
-        interval_range (tuple): A tuple containing the minimum and maximum interval
-                                between deployments, in seconds.
-        num_deployments (int, optional): The total number of cards to deploy.
-                                         If None, the deployment will run indefinitely.
+        interval_range: A tuple containing the minimum and maximum interval
+            between deployments, in seconds.
+        num_deployments: The total number of cards to deploy. If None, the
+            deployment will run indefinitely.
     """
     weights = get_deploy_weights()
     count = 0
@@ -54,16 +53,15 @@ def run_continuous_deployment(interval_range=(4, 6), num_deployments=None):
         print("Deployment stopped by user.")
         
 
-def deploy_specific_strategy(strategy):
-    """
-    Deploys cards according to a predefined strategy.
+def deploy_specific_strategy(strategy: list[tuple[int, int]]) -> bool:
+    """Deploys cards according to a predefined strategy.
 
-    The strategy is defined as a list of tuples, where each tuple contains
-    the card slot and the deployment position.
-    
+    The strategy is defined as a list of tuples, where each tuple contains the
+    card slot and the deployment position.
+
     Args:
-        strategy (list): A list of (card_slot, deploy_position) tuples.
-    
+        strategy: A list of (card_slot, deploy_position) tuples.
+
     Returns:
         True if the strategy was deployed successfully, False otherwise.
     """
@@ -95,15 +93,14 @@ def deploy_specific_strategy(strategy):
         return False
 
 
-def deploy_multiple_cards(num_cards=1, positions=None):
-    """
-    Deploys a specified number of cards to either specified or random positions.
-    
+def deploy_multiple_cards(num_cards: int = 1, positions: list[int] | None = None) -> list[tuple[int, int]]:
+    """Deploys a specified number of cards to either specified or random positions.
+
     Args:
-        num_cards (int): The number of cards to deploy.
-        positions (list, optional): A list of deployment positions to use. If not specified,
-                                   cards will be deployed to random positions.
-    
+        num_cards: The number of cards to deploy.
+        positions: A list of deployment positions to use. If not specified,
+            cards will be deployed to random positions.
+
     Returns:
         A list of (card_slot, deploy_position) tuples for each deployment.
     """

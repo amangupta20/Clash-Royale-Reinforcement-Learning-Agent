@@ -14,22 +14,24 @@ import torch
 
 @dataclass
 class PolicyConfig:
-    """
-    Configuration for policy implementations.
-    
+    """Configuration for policy implementations.
+
     Attributes:
-        device: Device to run the policy on ('cpu' or 'cuda'). Auto-detects CUDA if 'auto'
-        deterministic: Whether to use deterministic actions by default
-        action_space: Action space dimensions [card_slots, grid_x, grid_y]
-        state_dim: Dimension of the state vector
+        device: The device to run the policy on ('cpu' or 'cuda'). If 'auto',
+            it will auto-detect CUDA.
+        deterministic: Whether to use deterministic actions by default.
+        action_space: The dimensions of the action space, in the format
+            [card_slots, grid_x, grid_y].
+        state_dim: The dimension of the state vector.
     """
+
     device: str = 'auto'
     deterministic: bool = False
     action_space: Tuple[int, int, int] = (4, 32, 18)
     state_dim: int = 53
     
     def __post_init__(self):
-        """Validate configuration after initialization."""
+        """Validates the configuration after initialization."""
         # Auto-detect CUDA if requested
         if self.device == 'auto':
             try:
@@ -46,81 +48,80 @@ class PolicyConfig:
 
 
 class Policy(ABC):
+    """An abstract base class for policy implementations.
+
+    This interface defines the contract that all policy implementations must
+    adhere to in order to be compatible with the Clash Royale RL agent.
+
+    Attributes:
+        config: The policy configuration.
+        device: The device on which the policy will run.
     """
-    Abstract base class for policy implementations.
-    
-    This interface defines the contract that all policy implementations must follow
-    to be compatible with the Clash Royale RL agent.
-    """
-    
+
     def __init__(self, config: PolicyConfig):
-        """
-        Initialize the policy.
-        
+        """Initializes the policy.
+
         Args:
-            config: Policy configuration
+            config: The policy configuration.
         """
         self.config = config
         self.device = torch.device(config.device)
     
     @abstractmethod
     def forward(self, state: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the policy network.
-        
+        """Performs a forward pass through the policy network.
+
         Args:
-            state: State tensor of shape (batch_size, state_dim)
-            
+            state: A state tensor with shape (batch_size, state_dim).
+
         Returns:
-            Action logits tensor of shape (batch_size, 4, 32, 18)
+            An action logits tensor with shape (batch_size, 4, 32, 18).
         """
         pass
     
     @abstractmethod
     def act(self, state: np.ndarray, deterministic: Optional[bool] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """
-        Select an action given the current state.
-        
+        """Selects an action given the current state.
+
         Args:
-            state: Current state as numpy array of shape (state_dim,)
-            deterministic: Whether to use deterministic action selection
-            
+            state: The current state as a NumPy array with shape (state_dim,).
+            deterministic: Whether to use deterministic action selection.
+
         Returns:
-            Tuple of (action, info) where action is [card_slot, grid_x, grid_y]
+            A tuple containing the action and an info dictionary. The action is a
+            NumPy array with the format [card_slot, grid_x, grid_y].
         """
         pass
     
     @abstractmethod
     def get_action_logits(self, state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Get action logits for each action dimension.
-        
+        """Gets the action logits for each action dimension.
+
         Args:
-            state: State tensor of shape (batch_size, state_dim)
-            
+            state: A state tensor with shape (batch_size, state_dim).
+
         Returns:
-            Tuple of (card_logits, x_logits, y_logits) tensors
+            A tuple of tensors representing the action logits for card, x, and
+            y.
         """
         pass
     
     def set_deterministic(self, deterministic: bool):
-        """
-        Set the default deterministic behavior.
-        
+        """Sets the default deterministic behavior.
+
         Args:
-            deterministic: Whether to use deterministic actions by default
+            deterministic: Whether to use deterministic actions by default.
         """
         self.config.deterministic = deterministic
     
     def to(self, device: Union[str, torch.device]):
-        """
-        Move the policy to a different device.
-        
+        """Moves the policy to a different device.
+
         Args:
-            device: Target device
-            
+            device: The target device.
+
         Returns:
-            Self for method chaining
+            The policy, for method chaining.
         """
         if isinstance(device, str):
             device = torch.device(device)
@@ -130,27 +131,25 @@ class Policy(ABC):
         return self
     
     def eval(self):
-        """Set the policy to evaluation mode."""
+        """Sets the policy to evaluation mode."""
         pass
-    
+
     def train(self):
-        """Set the policy to training mode."""
+        """Sets the policy to training mode."""
         pass
-    
+
     def save(self, path: str):
-        """
-        Save the policy to disk.
-        
+        """Saves the policy to disk.
+
         Args:
-            path: Path to save the policy
+            path: The path where to save the policy.
         """
         raise NotImplementedError("Save method not implemented")
     
     def load(self, path: str):
-        """
-        Load the policy from disk.
-        
+        """Loads the policy from disk.
+
         Args:
-            path: Path to load the policy from
+            path: The path from where to load the policy.
         """
         raise NotImplementedError("Load method not implemented")

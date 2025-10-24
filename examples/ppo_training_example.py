@@ -30,9 +30,9 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    """Main training function."""
+    """The main training function."""
     logger.info("Starting PPO training example with real environment...")
-    
+
     # Create directories for outputs
     checkpoint_dir = Path("./checkpoints/ppo_example")
     log_dir = Path("./logs/ppo_example")
@@ -127,9 +127,9 @@ def main():
 
 
 def test_actor_critic_policy():
-    """Test the actor-critic policy with real environment observation space."""
+    """Tests the actor-critic policy with the real environment observation space."""
     logger.info("Testing actor-critic policy...")
-    
+
     from bootstrap.bootstrap_trainer import BootstrapActorCriticPolicy
     import gymnasium as gym
     

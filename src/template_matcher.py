@@ -5,11 +5,20 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 class DeckMatcher:
+    """Detects cards in a player's hand using template matching.
+
+    This class is optimized for speed by using a thread pool to perform
+    template matching in parallel.
+
+    Attributes:
+        deck: A list of card names in the player's deck.
+        templates: A list of tuples, where each tuple contains a card name and
+            its corresponding template image.
+        executor: A ThreadPoolExecutor for parallel template matching.
+        slot_ranges: A list of tuples defining the x-coordinate ranges for each
+            card slot.
     """
-    A class for detecting cards in a player's hand using template matching.
-    It is optimized for speed by using a thread pool to perform template matching in parallel.
-    """
-    def __init__(self, deck=None):
+    def __init__(self, deck: list[str] | None = None):
         if deck is None:
             raise ValueError("A deck of cards is required to initialize the DeckMatcher.")
         self.deck = deck
@@ -28,11 +37,15 @@ class DeckMatcher:
         # These ranges correspond to the x-coordinates of the four card slots.
         self.slot_ranges = [(0, 55), (55, 110), (110, 165), (165, 220)]
 
-    def load_templates(self):
-        """
-        Loads the card templates from the assets folder.
-        The templates are loaded as grayscale images and resized to half their original size
-        for faster template matching.
+    def load_templates(self) -> list[tuple[str, np.ndarray]]:
+        """Loads the card templates from the assets folder.
+
+        The templates are loaded as grayscale images and resized to half their
+        original size for faster template matching.
+
+        Returns:
+            A list of tuples, where each tuple contains a card name and its
+            corresponding template image.
         """
         templates = []
         for card in self.deck:
@@ -40,10 +53,17 @@ class DeckMatcher:
             if template is not None:
                 templates.append((card, template))
         return templates
-    def _fast_which_slot(self, x):
-        """
-        Determines which card slot a detected card belongs to based on its x-coordinate.
-        This is an optimized version that avoids the overhead of a function call.
+    def _fast_which_slot(self, x: int) -> int | None:
+        """Determines which card slot a detected card belongs to.
+
+        This is an optimized version that avoids the overhead of a function
+        call.
+
+        Args:
+            x: The x-coordinate of the detected card.
+
+        Returns:
+            The slot number (1-4), or None if the coordinate is out of range.
         """
         if x < 55:
             return 1
@@ -55,10 +75,21 @@ class DeckMatcher:
             return 4
         return None
 
-    def _match_single_template(self, game_image, card_template_pair):
-        """
-        Performs template matching for a single card.
+    def _match_single_template(
+        self, game_image: np.ndarray, card_template_pair: tuple[str, np.ndarray]
+    ) -> tuple[str, float, int]:
+        """Performs template matching for a single card.
+
         This function is designed to be executed in parallel by the thread pool.
+
+        Args:
+            game_image: The grayscale game image to search in.
+            card_template_pair: A tuple containing the card name and its
+                template image.
+
+        Returns:
+            A tuple containing the card name, the maximum correlation value, and
+            the x-coordinate of the match.
         """
         card_name, template = card_template_pair
         # Use normalized cross-correlation for template matching
@@ -68,15 +99,14 @@ class DeckMatcher:
         # Return the card name, the maximum correlation value, and the x-coordinate of the match
         return card_name, max_val, max_loc[0]
 
-    def detect_slots(self, hand_roi):
-        """
-        Detect cards in the hand ROI.
-        
+    def detect_slots(self, hand_roi: np.ndarray) -> dict[int, str | None]:
+        """Detects cards in the hand ROI.
+
         Args:
-            hand_roi: Pre-extracted hand region (BGR format, uint8, contiguous)
-            
+            hand_roi: The pre-extracted hand region in BGR format.
+
         Returns:
-            Dictionary mapping slot numbers to detected card names
+            A dictionary mapping slot numbers to detected card names.
         """
         overall_start = time.perf_counter()
         

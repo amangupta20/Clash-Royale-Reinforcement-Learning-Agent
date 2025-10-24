@@ -13,21 +13,25 @@ logger = logging.getLogger(__name__)
 
 
 class BootstrapTrainer(ABC):
+    """An abstract base class for bootstrap trainers.
+
+    This class defines the interface that all trainers must implement for
+    training RL agents in the Clash Royale environment.
+
+    Attributes:
+        env: The environment to train in.
+        policy: The policy to train.
+        config: The training configuration.
+        training_stats: A dictionary to store training statistics.
     """
-    Abstract base class for bootstrap trainers.
-    
-    This class defines the interface that all trainers must implement
-    for training RL agents in the Clash Royale environment.
-    """
-    
+
     def __init__(self, env, policy, config: Optional[Dict[str, Any]] = None):
-        """
-        Initialize the trainer.
-        
+        """Initializes the trainer.
+
         Args:
-            env: The environment to train in
-            policy: The policy to train
-            config: Training configuration (optional)
+            env: The environment to train in.
+            policy: The policy to train.
+            config: The training configuration.
         """
         self.env = env
         self.policy = policy
@@ -36,56 +40,51 @@ class BootstrapTrainer(ABC):
     
     @abstractmethod
     def train(self, total_timesteps: int, **kwargs) -> Dict[str, Any]:
-        """
-        Train the policy.
-        
+        """Trains the policy.
+
         Args:
-            total_timesteps: Number of timesteps to train for
-            **kwargs: Additional training arguments
-            
+            total_timesteps: The number of timesteps to train for.
+            **kwargs: Additional training arguments.
+
         Returns:
-            Dictionary with training statistics
+            A dictionary with training statistics.
         """
         pass
     
     @abstractmethod
     def save_checkpoint(self, path: str, **kwargs):
-        """
-        Save a training checkpoint.
-        
+        """Saves a training checkpoint.
+
         Args:
-            path: Path to save the checkpoint
-            **kwargs: Additional checkpoint data
+            path: The path where to save the checkpoint.
+            **kwargs: Additional checkpoint data.
         """
         pass
     
     @abstractmethod
     def load_checkpoint(self, path: str, **kwargs):
-        """
-        Load a training checkpoint.
-        
+        """Loads a training checkpoint.
+
         Args:
-            path: Path to load the checkpoint from
-            **kwargs: Additional loading options
+            path: The path from where to load the checkpoint.
+            **kwargs: Additional loading options.
         """
         pass
     
     def get_training_stats(self) -> Dict[str, Any]:
-        """
-        Get current training statistics.
-        
+        """Gets the current training statistics.
+
         Returns:
-            Dictionary with training statistics
+            A dictionary with the training statistics.
         """
         return self.training_stats.copy()
     
     def log_metrics(self, metrics: Dict[str, Any], step: int):
-        """
-        Log training metrics.
-        
+        """Logs training metrics.
+
         Args:
-            metrics: Dictionary of metrics to log
-            step: Training step
+            metrics: A dictionary of metrics to log.
+            step: The training step.
         """
         for key, value in metrics.items():
             logger.info(f"Step {step} - {key}: {value}")

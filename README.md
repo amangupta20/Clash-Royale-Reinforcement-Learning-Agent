@@ -14,6 +14,19 @@ We are in an early tooling phase validating capture, preprocessing, and input pi
 - **Template Matching:** OpenCV template matching prototype for card detection proof-of-concept.
 - **Environment Config:** `.env` driven configuration for crop offsets, window name, paths, and device connection.
 
+### Neural Network Architecture
+
+The agent uses a **Structured MLP Policy** with a shared card encoder to efficiently process the 53-dimensional state vector. This architecture is designed to handle the distinct types of information present in the game state.
+
+**Architecture Breakdown:**
+
+1.  **Global Processor:** Processes the 13-dimensional global state, which includes elixir, time, tower health, and game phase indicators.
+2.  **Shared Card Encoder:** Processes the 10-dimensional features for each of the four cards in the player's hand. This shared encoder allows the model to learn a single representation for cards that can be applied to any card in any slot.
+3.  **Fusion Layer:** Combines the representations from the global processor and the card encoder into a single, fused representation.
+4.  **Final Decision Layer:** Produces action logits for the `MultiDiscrete([4, 32, 18])` action space, which corresponds to the card slot, x-coordinate, and y-coordinate of the deployment.
+
+This structured approach allows the model to learn more efficiently by processing the global and card-specific features separately before combining them to make a final decision.
+
 ### Helper Scripts Overview (`HelperScripts/`)
 
 | Script                                        | Purpose                                                                          |

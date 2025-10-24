@@ -19,24 +19,33 @@ from windows_capture import Frame, InternalCaptureControl, WindowsCapture
 
 
 class BootstrapCapture:
+    """A screen capture wrapper for the BlueStacks emulator.
+
+    This class provides an efficient screen capture mechanism with support for
+    cropping to a region of interest (ROI). It uses the `windows-capture`
+    library for optimized frame handling and aims for an average capture
+    latency of less than 50ms.
+
+    Attributes:
+        window_name: The name of the window to capture.
+        roi: The region of interest to capture, as a tuple of (x, y, width,
+            height).
+        show_fps: Whether to display FPS information.
+        buffer: A DoubleBuffer for thread-safe frame handling.
+        stop_event: A threading.Event to signal the capture thread to stop.
+        capture_thread: The thread used for capturing frames.
+        fps_thread: The thread used for calculating and displaying the FPS.
+        is_capturing: A boolean indicating whether the capture is active.
     """
-    Bootstrap screen capture wrapper for BlueStacks emulator.
-    
-    This class provides efficient screen capture with ROI cropping support
-    for Phase 0 of the Clash Royale RL Agent. It uses windows-capture as
-    the primary capture method with optimized frame handling.
-    
-    Performance Target: <50ms average capture latency
-    """
-    
+
     def __init__(self, window_name: str = "BlueStacks App Player 1", roi: Optional[Tuple[int, int, int, int]] = None, show_fps: bool = True):
-        """
-        Initialize the BootstrapCapture.
-        
+        """Initializes the BootstrapCapture.
+
         Args:
-            window_name: Name of the window to capture
-            roi: Region of interest as (x, y, width, height). If None, captures full window
-            show_fps: Whether to display FPS information (default: True)
+            window_name: The name of the window to capture.
+            roi: The region of interest, as a tuple of (x, y, width, height).
+                If None, the full window is captured.
+            show_fps: Whether to display FPS information.
         """
         self.window_name = window_name
         self.roi = roi
@@ -48,11 +57,11 @@ class BootstrapCapture:
         self.is_capturing = False
         
     def grab(self) -> Optional[np.ndarray]:
-        """
-        Grab a single frame from the buffer.
-        
+        """Grabs a single frame from the buffer.
+
         Returns:
-            RGB frame as numpy array with shape (H, W, 3), or None if no frame available
+            An BGR frame as a NumPy array with shape (H, W, 3), or None if no
+            frame is available.
         """
         frame = self.buffer.read_copy()
         if frame is not None and self.roi is not None:
@@ -61,11 +70,10 @@ class BootstrapCapture:
         return frame
     
     def start_capture(self) -> bool:
-        """
-        Start the capture process.
-        
+        """Starts the capture process.
+
         Returns:
-            True if capture started successfully, False otherwise
+            True if the capture started successfully, False otherwise.
         """
         if self.is_capturing:
             return True
@@ -89,7 +97,7 @@ class BootstrapCapture:
         return True
     
     def stop_capture(self):
-        """Stop the capture process."""
+        """Stops the capture process."""
         if not self.is_capturing:
             return
             
@@ -101,15 +109,23 @@ class BootstrapCapture:
         self.is_capturing = False
     
     def _capture_thread_func(self, buffer: 'DoubleBuffer', stop_event: threading.Event):
-        """
-        Internal capture thread function.
+        """The internal capture thread function.
+
+        Args:
+            buffer: The DoubleBuffer to write frames to.
+            stop_event: The threading.Event to signal when to stop.
         """
         try:
             capture = WindowsCapture(window_name=self.window_name)
 
             @capture.event
             def on_frame_arrived(frame: Frame, capture_control: InternalCaptureControl):
-                """Handle new frame arrival."""
+                """Handles new frame arrival.
+
+                Args:
+                    frame: The captured frame.
+                    capture_control: The capture control object.
+                """
                 if stop_event.is_set():
                     capture_control.stop()
                     return
@@ -129,7 +145,7 @@ class BootstrapCapture:
 
             @capture.event
             def on_closed():
-                """Handle capture closed event."""
+                """Handles the capture closed event."""
                 print("Capture session closed")
                 stop_event.set()
 
@@ -141,7 +157,12 @@ class BootstrapCapture:
             stop_event.set()
     
     def _fps_counter(self, buffer: 'DoubleBuffer', stop_event: threading.Event):
-        """Calculate and print FPS."""
+        """Calculates and prints the FPS.
+
+        Args:
+            buffer: The DoubleBuffer to read the frame count from.
+            stop_event: The threading.Event to signal when to stop.
+        """
         start_time = time.time()
         while not stop_event.is_set():
             time.sleep(5)
@@ -156,10 +177,19 @@ class BootstrapCapture:
 
 
 class DoubleBuffer:
+    """A simple double buffer for thread-safe frame handling.
+
+    This class provides a way to share frames between threads without race
+    conditions. One thread can write to the back buffer while another thread
+    reads from the front buffer. The buffers are swapped atomically.
+
+    Attributes:
+        front_buffer: The buffer that is read from.
+        back_buffer: The buffer that is written to.
+        lock: A threading.Lock to ensure atomic operations.
+        frame_count: The number of frames that have been written.
     """
-    A simple double buffer implementation for thread-safe frame handling.
-    """
-    
+
     def __init__(self):
         self.front_buffer: Optional[np.ndarray] = None
         self.back_buffer: Optional[np.ndarray] = None
@@ -167,8 +197,10 @@ class DoubleBuffer:
         self.frame_count = 0
 
     def write(self, frame: np.ndarray):
-        """
-        Write a new frame to the back buffer and then swap with front buffer.
+        """Writes a new frame to the back buffer and swaps it with the front buffer.
+
+        Args:
+            frame: The new frame to write.
         """
         # Optimize frame for better performance
         if not frame.flags['C_CONTIGUOUS']:
@@ -183,11 +215,19 @@ class DoubleBuffer:
             self.frame_count += 1
 
     def read(self) -> Optional[np.ndarray]:
-        """Read the front buffer."""
+        """Reads the front buffer.
+
+        Returns:
+            The frame as a NumPy array, or None if the buffer is empty.
+        """
         return self.front_buffer
-    
+
     def read_copy(self) -> Optional[np.ndarray]:
-        """Read the front buffer and return a copy."""
+        """Reads the front buffer and returns a copy.
+
+        Returns:
+            A copy of the frame as a NumPy array, or None if the buffer is empty.
+        """
         if self.front_buffer is not None:
             return self.front_buffer.copy()
         return None
@@ -195,14 +235,13 @@ class DoubleBuffer:
 
 # Legacy functions for backward compatibility
 def optimize_frame_for_processing(frame: np.ndarray) -> np.ndarray:
-    """
-    Optimize frame for faster processing using NumPy operations.
-    
+    """Optimizes a frame for faster processing using NumPy operations.
+
     Args:
-        frame: Input frame as NumPy array
-        
+        frame: The input frame as a NumPy array.
+
     Returns:
-        Optimized frame ready for computer vision processing
+        The optimized frame, ready for computer vision processing.
     """
     if not frame.flags['C_CONTIGUOUS']:
         frame = np.ascontiguousarray(frame)
@@ -212,39 +251,45 @@ def optimize_frame_for_processing(frame: np.ndarray) -> np.ndarray:
 
 
 def create_frame_roi(frame: np.ndarray, x: int, y: int, width: int, height: int) -> np.ndarray:
-    """
-    Create Region of Interest (ROI) using NumPy slicing.
-    
+    """Creates a Region of Interest (ROI) using NumPy slicing.
+
     Args:
-        frame: Input frame
-        x, y: Top-left coordinates
-        width, height: ROI dimensions
-        
+        frame: The input frame.
+        x: The x-coordinate of the top-left corner.
+        y: The y-coordinate of the top-left corner.
+        width: The width of the ROI.
+        height: The height of the ROI.
+
     Returns:
-        ROI as a view of the original array
+        A view of the original array representing the ROI.
     """
     return frame[y:y+height, x:x+width]
 
 
 # Standalone functions for backward compatibility with original capture.py
 def capture_thread(buffer: DoubleBuffer, stop_event: threading.Event):
-    """
-    The main thread for capturing frames from the specified window.
-    This function initializes the window capture, sets up event handlers,
-    and starts the capture process.
-    
+    """The main thread for capturing frames from the specified window.
+
+    This function initializes the window capture, sets up event handlers, and
+    starts the capture process.
+
     Args:
-        buffer: DoubleBuffer to write frames to
-        stop_event: Threading event to signal when to stop
+        buffer: The DoubleBuffer to write frames to.
+        stop_event: The threading.Event to signal when to stop.
     """
     # Initialize the window capture
     capture = WindowsCapture(window_name="BlueStacks App Player 1")
 
     @capture.event
     def on_frame_arrived(frame: Frame, capture_control: InternalCaptureControl):
-        """
-        This function is called whenever a new frame is available.
-        It converts the frame to a BGR format and writes it to the double buffer.
+        """This function is called whenever a new frame is available.
+
+        It converts the frame to a BGR format and writes it to the double
+        buffer.
+
+        Args:
+            frame: The captured frame.
+            capture_control: The capture control object.
         """
         # Get frame as NumPy array (already optimized by windows-capture)
         frame_array = frame.frame_buffer
@@ -270,8 +315,8 @@ def capture_thread(buffer: DoubleBuffer, stop_event: threading.Event):
 
     @capture.event
     def on_closed():
-        """
-        This function is called when the capture is closed.
+        """This function is called when the capture is closed.
+
         It sets the stop event to signal other threads to terminate.
         """
         print("Capture session closed")
@@ -284,12 +329,11 @@ def capture_thread(buffer: DoubleBuffer, stop_event: threading.Event):
 
 
 def fps_counter(stop_event: threading.Event, buffer: DoubleBuffer):
-    """
-    A simple thread that calculates and prints the frames per second (FPS) of the capture.
-    
+    """A simple thread that calculates and prints the FPS of the capture.
+
     Args:
-        stop_event: Threading event to signal when to stop
-        buffer: DoubleBuffer to read frame count from
+        stop_event: The threading.Event to signal when to stop.
+        buffer: The DoubleBuffer to read the frame count from.
     """
     start_time = time.time()
     while not stop_event.is_set():

@@ -33,23 +33,24 @@ from dataclasses import dataclass
 
 @dataclass
 class StateVector:
-    """
-    StateVector data entity for Phase 0.
-    
+    """A data entity for the Phase 0 state vector.
+
     This class represents the ~50-dimensional state vector used by the Phase 0
-    RL agent. All values are normalized to [0, 1] or [-1, 1] range.
-    
+    RL agent. All values are normalized to a range of [0, 1] or [-1, 1].
+
     Attributes:
-        vector: numpy array of shape (50,) containing the state features
-        timestamp: timestamp when the state was created
-        metadata: additional metadata about the state
+        vector: A NumPy array of shape (50,) or (53,) containing the state
+            features.
+        timestamp: The timestamp of when the state was created.
+        metadata: Additional metadata about the state.
     """
+
     vector: np.ndarray
     timestamp: float
     metadata: Dict[str, Any]
     
     def __post_init__(self):
-        """Validate the StateVector after initialization."""
+        """Validates the StateVector after initialization."""
         if not isinstance(self.vector, np.ndarray):
             raise ValueError("StateVector.vector must be a numpy array")
         
@@ -66,24 +67,29 @@ class StateVector:
             raise ValueError("StateVector.vector contains non-finite values (NaN or Inf)")
     
     def get_global_features(self) -> np.ndarray:
-        """Get the global features (indices 0-12)."""
+        """Gets the global features (indices 0-12)."""
         return self.vector[0:13]
-    
+
     def get_hand_features(self) -> np.ndarray:
-        """Get the hand features (indices 13-52)."""
+        """Gets the hand features (indices 13-52)."""
         return self.vector[13:53]
 
 
 class MinimalStateBuilder:
+    """A minimal state builder for Phase 0 of the Clash Royale AI.
+
+    This class aggregates perception outputs from `BootstrapCapture`,
+    `TemplateCardMatcher`, and `MinimalPerception` into a ~50-dimensional
+    state vector for the Phase 0 RL agent. It aims for a processing time of
+    less than 10ms.
+
+    Attributes:
+        card_names: A list of the 8 card names in the deck.
+        card_id_map: A dictionary mapping card names to their IDs.
+        card_one_hot: A dictionary mapping card names to their one-hot encoded
+            representations.
     """
-    Minimal StateBuilder for Phase 0.
-    
-    This class aggregates perception outputs from BootstrapCapture, TemplateCardMatcher,
-    and MinimalPerception into a ~50-dimensional state vector for the Phase 0 RL agent.
-    
-    Performance Target: <10ms processing time
-    """
-    
+
     # Card attribute mapping from attribute.txt
     CARD_ATTRIBUTES = {
         'is_air': 0,
@@ -110,11 +116,10 @@ class MinimalStateBuilder:
     }
     
     def __init__(self, card_names: List[str]):
-        """
-        Initialize the MinimalStateBuilder.
-        
+        """Initializes the MinimalStateBuilder.
+
         Args:
-            card_names: List of 8 card names in the deck
+            card_names: A list of the 8 card names in the deck.
         """
         if not card_names or len(card_names) != 8:
             raise ValueError("Exactly 8 card names required for deck")
@@ -129,24 +134,26 @@ class MinimalStateBuilder:
             one_hot[i] = 1.0
             self.card_one_hot[name] = one_hot
     
-    def build_state(self, 
-                   frame: np.ndarray,
-                   detected_cards: Dict[int, Dict[str, Any]],
-                   elixir_count: int,
-                   tower_health: Dict[str, List[int]],
-                   match_time: float = 0.0) -> StateVector:
-        """
-        Build a ~50-dimensional state vector from perception outputs.
-        
+    def build_state(self,
+                    frame: np.ndarray,
+                    detected_cards: Dict[int, Dict[str, Any]],
+                    elixir_count: int,
+                    tower_health: Dict[str, List[int]],
+                    match_time: float = 0.0) -> StateVector:
+        """Builds a ~50-dimensional state vector from perception outputs.
+
         Args:
-            frame: Full screen frame in BGR format (not used directly but kept for interface consistency)
-            detected_cards: Dictionary mapping slot numbers to detection results from TemplateCardMatcher
-            elixir_count: Current elixir count from MinimalPerception
-            tower_health: Dictionary with tower health values from MinimalPerception
-            match_time: Current match time in seconds (normalized internally)
-            
+            frame: The full screen frame in BGR format (not used directly but
+                kept for interface consistency).
+            detected_cards: A dictionary mapping slot numbers to detection
+                results from the `TemplateCardMatcher`.
+            elixir_count: The current elixir count from `MinimalPerception`.
+            tower_health: A dictionary with tower health values from
+                `MinimalPerception`.
+            match_time: The current match time in seconds.
+
         Returns:
-            StateVector object with ~50-dimensional feature vector
+            A `StateVector` object with the ~50-dimensional feature vector.
         """
         start_time = time.perf_counter()
         
@@ -176,20 +183,21 @@ class MinimalStateBuilder:
             metadata=metadata
         )
     
-    def _extract_global_features(self, 
+    def _extract_global_features(self,
                                 state_vector: np.ndarray,
                                 elixir_count: int,
                                 tower_health: Dict[str, List[int]],
                                 match_time: float):
-        """
-        Extract global features (indices 0-12).
-        
-        Features:
-        - Player elixir (0-10, normalized to [0, 1])
-        - Opponent elixir placeholder (-1)
-        - Match time (normalized to [0, 1], assuming max 5 minutes)
-        - 6 tower health percentages (0-1)
-        - 4 phase indicators (early/mid/late/overtime)
+        """Extracts global features and populates the state vector.
+
+        The global features include player elixir, a placeholder for opponent
+        elixir, match time, tower health, and phase indicators.
+
+        Args:
+            state_vector: The state vector to populate.
+            elixir_count: The current elixir count.
+            tower_health: A dictionary with tower health values.
+            match_time: The current match time in seconds.
         """
         # Player elixir (index 0) - not normalized
         state_vector[0] = np.clip(elixir_count, 0, 10)
@@ -264,15 +272,16 @@ class MinimalStateBuilder:
                                        state_vector: np.ndarray,
                                        detected_cards: Dict[int, Dict[str, Any]],
                                        elixir_count: int):
-        """
-        Extract hand features for 53-dim vector (indices 13-52).
-        
-        For each of 4 visible cards (10 features per card):
-        - Card ID one-hot encoded (8 dims)
-        - Elixir cost (1 dim)
-        - Affordability (can afford with current elixir) (1 dim)
-        
-        Total: 4 cards × 10 features = 40 dimensions
+        """Extracts hand features for the 53-dimensional vector.
+
+        For each of the 4 visible cards, this method extracts 10 features,
+        including the one-hot encoded card ID, elixir cost, and affordability.
+
+        Args:
+            state_vector: The state vector to populate.
+            detected_cards: A dictionary mapping slot numbers to detection
+                results.
+            elixir_count: The current elixir count.
         """
         # Define the card elixir costs
         card_costs = {
@@ -310,15 +319,16 @@ class MinimalStateBuilder:
                                        state_vector: np.ndarray,
                                        detected_cards: Dict[int, Dict[str, Any]],
                                        elixir_count: int):
-        """
-        Extract hand features for 53-dim vector (indices 13-52).
-        
-        For each of 4 visible cards (10 features per card):
-        - Card ID (1 dim) - values 0-7 (not one-hot)
-        - Card attributes (8 dims) - from CARD_ATTRIBUTE_MAP
-        - Elixir cost (1 dim) - values 0-10 (not normalized)
-        
-        Total: 4 cards × 10 features = 40 dimensions
+        """Extracts hand features for the 53-dimensional vector.
+
+        For each of the 4 visible cards, this method extracts 10 features,
+        including the card ID, card attributes, and elixir cost.
+
+        Args:
+            state_vector: The state vector to populate.
+            detected_cards: A dictionary mapping slot numbers to detection
+                results.
+            elixir_count: The current elixir count.
         """
         # Define the card elixir costs
         card_costs = {
@@ -360,15 +370,18 @@ class MinimalStateBuilder:
                                   detected_cards: Dict[int, Dict[str, Any]],
                                   elixir_count: int,
                                   match_time: float):
-        """
-        Extract game time features (indices 45-49).
-        
-        Temporal features for better decision making:
-        - Time in double-elixir (normalized)
-        - Time until overtime (normalized)
-        - Elixir regeneration rate (fixed)
-        - Time since last card play (placeholder)
-        - Average time between plays (placeholder)
+        """Extracts game time features and populates the state vector.
+
+        This method extracts temporal features for better decision-making, such
+        as the time in double-elixir, time until overtime, and elixir
+        regeneration rate.
+
+        Args:
+            state_vector: The state vector to populate.
+            detected_cards: A dictionary mapping slot numbers to detection
+                results.
+            elixir_count: The current elixir count.
+            match_time: The current match time in seconds.
         """
         # Feature 45: Time in double-elixir (normalized to [0, 1])
         # Double-elixir starts at 120s and lasts until overtime at 300s (180s max)

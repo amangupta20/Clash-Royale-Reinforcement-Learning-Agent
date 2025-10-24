@@ -15,19 +15,20 @@ from typing import Dict, Any, Tuple, Optional
 
 
 class ClashRoyaleEnv(gym.Env):
+    """A basic Clash Royale environment for future expansion.
+
+    This class is a placeholder implementation that will be expanded in future
+    phases. For Phase 0, the primary implementation is `BootstrapClashRoyaleEnv`
+    in `src/bootstrap/bootstrap_env.py`.
+
+    Attributes:
+        action_space: The action space for the environment.
+        observation_space: The observation space for the environment.
     """
-    Basic Clash Royale Environment for future expansion.
-    
-    This is a placeholder implementation that will be expanded in future phases.
-    For Phase 0, use BootstrapClashRoyaleEnv from src/bootstrap/bootstrap_env.py.
-    
-    Phase 0 environment uses simplified state and reward; upgraded in Phase 1
-    """
-    
+
     def __init__(self):
-        """Initialize the basic Clash Royale environment."""
+        """Initializes the basic Clash Royale environment."""
         super().__init__()
-        
         # Action space: MultiDiscrete([4, 32, 18])
         # card_slot: 0-3 (4 visible cards)
         # grid_x: 0-31 (horizontal grid)
@@ -48,15 +49,14 @@ class ClashRoyaleEnv(gym.Env):
         self._done = False
         
     def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """
-        Reset the environment.
-        
+        """Resets the environment.
+
         Args:
-            seed: Random seed for reproducibility
-            options: Additional options for reset
-            
+            seed: A random seed for reproducibility.
+            options: Additional options for resetting the environment.
+
         Returns:
-            Tuple of (observation, info)
+            A tuple containing the initial observation and an info dictionary.
         """
         super().reset(seed=seed)
         
@@ -72,14 +72,14 @@ class ClashRoyaleEnv(gym.Env):
         return self._state, info
     
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
-        """
-        Step the environment.
-        
+        """Steps the environment.
+
         Args:
-            action: Action to take
-            
+            action: The action to take.
+
         Returns:
-            Tuple of (observation, reward, terminated, truncated, info)
+            A tuple containing the observation, reward, terminated flag,
+            truncated flag, and an info dictionary.
         """
         if self._done:
             raise RuntimeError("Environment is done. Call reset() before step().")
@@ -98,9 +98,9 @@ class ClashRoyaleEnv(gym.Env):
         return self._state, reward, terminated, truncated, info
     
     def render(self, mode: str = 'human'):
-        """Render the environment (placeholder)."""
+        """Renders the environment (placeholder)."""
         pass
-    
+
     def close(self):
-        """Close the environment."""
+        """Closes the environment."""
         pass

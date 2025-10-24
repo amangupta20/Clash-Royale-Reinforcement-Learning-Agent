@@ -55,25 +55,28 @@ logger = logging.getLogger(__name__)
 
 
 class BootstrapActionExecutor(BaseActionExecutor):
+    """An action executor for the bootstrap phase of the Clash Royale AI.
+
+    This class implements the `BaseActionExecutor` interface to provide
+    ADB-based action execution with basic humanization features for the
+    BlueStacks emulator. It supports different screen resolutions and includes
+    features like coordinate jitter and variable timing to simulate human-like
+    interactions.
+
+    Attributes:
+        resolution: The screen resolution, e.g., "1920x1080".
+        screen_config: A dictionary containing the screen configuration for the
+            specified resolution.
+        jitter_range: A tuple defining the range of random jitter to apply to
+            coordinates.
+        delay_range: A tuple defining the range of random delays between
+            actions.
+        device: The ADB device connection.
+        is_connected_flag: A boolean indicating whether the device is connected.
+        grid_width: The width of the action grid.
+        grid_height: The height of the action grid.
     """
-    Bootstrap Action Executor for Phase 0.
-    
-    This class implements the BaseActionExecutor interface to provide ADB-based
-    action execution with basic humanization features for the BlueStacks emulator.
-    
-    Action Space:
-    - card_slot: Integer (0-3) for card selection from 4 visible cards in hand
-    - grid_x: Integer (0-31) for x position on the 32×18 grid
-    - grid_y: Integer (0-17) for y position on the 32×18 grid
-    
-    Humanization Features:
-    - Coordinate jitter: ±5-10 pixels for anti-detection
-    - Variable timing: 50-200ms delays between actions
-    - Random action failures handling
-    
-    Basic jitter for anti-detection; more sophisticated humanization in Phase 4
-    """
-    
+
     # Screen resolution configuration for BlueStacks
     # Supports both 1920×1080 and 1280×720 resolutions
     SCREEN_RESOLUTIONS = {
@@ -115,16 +118,15 @@ class BootstrapActionExecutor(BaseActionExecutor):
                  resolution: str = "1920x1080",
                  jitter_range: Tuple[int, int] = (5, 10),
                  delay_range: Tuple[int, int] = (50, 200)):
-        """
-        Initialize the BootstrapActionExecutor.
-        
+        """Initializes the BootstrapActionExecutor.
+
         Args:
-            resolution: Screen resolution ("1920x1080" or "1280x720")
-            jitter_range: Tuple of (min, max) jitter in pixels
-            delay_range: Tuple of (min, max) delay in milliseconds
-            
+            resolution: The screen resolution, e.g., "1920x1080".
+            jitter_range: A tuple defining the range of random jitter.
+            delay_range: A tuple defining the range of random delays.
+
         Raises:
-            ValueError: If resolution is not supported
+            ValueError: If the specified resolution is not supported.
         """
         if resolution not in self.SCREEN_RESOLUTIONS:
             raise ValueError(f"Unsupported resolution: {resolution}. "
@@ -146,11 +148,10 @@ class BootstrapActionExecutor(BaseActionExecutor):
         logger.info(f"BootstrapActionExecutor initialized with resolution: {resolution}")
     
     def connect(self) -> bool:
-        """
-        Connect to the BlueStacks emulator via adb-shell library.
-        
+        """Connects to the BlueStacks emulator via the adb-shell library.
+
         Returns:
-            bool: True if connection was successful, False otherwise
+            True if the connection was successful, False otherwise.
         """
         try:
             logger.info(f"Attempting to connect to device at {DEVICE_IP}:{DEVICE_PORT} using adb-shell...")
@@ -186,7 +187,7 @@ class BootstrapActionExecutor(BaseActionExecutor):
             return False
     
     def disconnect(self) -> None:
-        """Disconnect from the BlueStacks emulator."""
+        """Disconnects from the BlueStacks emulator."""
         if self.device:
             try:
                 self.device.close()
@@ -198,26 +199,22 @@ class BootstrapActionExecutor(BaseActionExecutor):
                 self.is_connected_flag = False
     
     def is_connected(self) -> bool:
-        """
-        Check if connected to the BlueStacks emulator.
-        
+        """Checks if connected to the BlueStacks emulator.
+
         Returns:
-            bool: True if connected, False otherwise
+            True if connected, False otherwise.
         """
         return self.is_connected_flag and self.device is not None
     
     def execute(self, action: Dict[str, Any]) -> bool:
-        """
-        Execute a card deployment action in the game environment.
-        
+        """Executes a card deployment action in the game environment.
+
         Args:
-            action: Dictionary containing action parameters:
-                - card_slot: Integer (0-3) for card selection from 4 visible cards in hand
-                - grid_x: Integer (0-31) for x position on the grid
-                - grid_y: Integer (0-17) for y position on the grid
-                
+            action: A dictionary containing the action parameters, including
+                'card_slot', 'grid_x', and 'grid_y'.
+
         Returns:
-            bool: True if action was executed successfully, False otherwise
+            True if the action was executed successfully, False otherwise.
         """
         start_time = time.perf_counter()
         
@@ -265,14 +262,14 @@ class BootstrapActionExecutor(BaseActionExecutor):
             return False
     
     def execute_with_result(self, action: Dict[str, Any]) -> ActionResult:
-        """
-        Execute a card deployment action and return detailed result.
-        
+        """Executes a card deployment action and returns a detailed result.
+
         Args:
-            action: Dictionary containing action parameters
-            
+            action: A dictionary containing the action parameters.
+
         Returns:
-            ActionResult: Detailed result of the action execution
+            An `ActionResult` object with the detailed result of the action
+            execution.
         """
         start_time = time.perf_counter()
         
@@ -303,14 +300,13 @@ class BootstrapActionExecutor(BaseActionExecutor):
             )
     
     def _validate_action(self, action: Dict[str, Any]) -> bool:
-        """
-        Validate action parameters.
-        
+        """Validates the action parameters.
+
         Args:
-            action: Action dictionary to validate
-            
+            action: The action dictionary to validate.
+
         Returns:
-            bool: True if action is valid, False otherwise
+            True if the action is valid, False otherwise.
         """
         required_keys = ['card_slot', 'grid_x', 'grid_y']
         
@@ -345,18 +341,17 @@ class BootstrapActionExecutor(BaseActionExecutor):
         return True
     
     def _grid_to_screen_coords(self, grid_x: int, grid_y: int) -> Tuple[int, int]:
-        """
-        Convert grid coordinates to screen coordinates.
-        
-        This method maps the 32×18 grid to actual screen pixels within the arena bounds.
-        The grid covers the playable area of the game arena.
-        
+        """Converts grid coordinates to screen coordinates.
+
+        This method maps the 32x18 grid to actual screen pixels within the
+        arena bounds, covering the playable area of the game.
+
         Args:
-            grid_x: X coordinate on the grid (0-31)
-            grid_y: Y coordinate on the grid (0-17)
-            
+            grid_x: The x-coordinate on the grid (0-31).
+            grid_y: The y-coordinate on the grid (0-17).
+
         Returns:
-            Tuple[int, int]: Screen coordinates (x, y) in pixels
+            A tuple of (x, y) screen coordinates in pixels.
         """
         arena_bounds = self.screen_config['arena_bounds']
         
@@ -376,16 +371,16 @@ class BootstrapActionExecutor(BaseActionExecutor):
         return (screen_x, screen_y)
     
     def _add_jitter(self, coords: Tuple[int, int]) -> Tuple[int, int]:
-        """
-        Add random jitter to coordinates for humanization.
-        
-        Basic jitter for anti-detection; more sophisticated humanization in Phase 4
-        
+        """Adds random jitter to coordinates for humanization.
+
+        This is a basic anti-detection measure; more sophisticated
+        humanization will be implemented in Phase 4.
+
         Args:
-            coords: Original coordinates (x, y)
-            
+            coords: The original (x, y) coordinates.
+
         Returns:
-            Tuple[int, int]: Jittered coordinates (x, y)
+            The jittered (x, y) coordinates.
         """
         x, y = coords
         jitter_min, jitter_max = self.jitter_range
@@ -396,18 +391,18 @@ class BootstrapActionExecutor(BaseActionExecutor):
         
         return (x + jitter_x, y + jitter_y)
     
-    def _execute_action_sequence(self, 
-                                card_coords: Tuple[int, int], 
+    def _execute_action_sequence(self,
+                                card_coords: Tuple[int, int],
                                 deploy_coords: Tuple[int, int]) -> bool:
-        """
-        Execute the complete action sequence: select card, wait, deploy.
-        
+        """Executes the complete action sequence: select card, wait, deploy.
+
         Args:
-            card_coords: Coordinates of the card to select
-            deploy_coords: Coordinates to deploy the card
-            
+            card_coords: The coordinates of the card to select.
+            deploy_coords: The coordinates to deploy the card to.
+
         Returns:
-            bool: True if action sequence executed successfully, False otherwise
+            True if the action sequence was executed successfully, False
+            otherwise.
         """
         try:
             # Step 1: Select the card
@@ -432,14 +427,13 @@ class BootstrapActionExecutor(BaseActionExecutor):
             return False
     
     def _execute_tap(self, coords: Tuple[int, int]) -> bool:
-        """
-        Execute a tap command at the given coordinates.
-        
+        """Executes a tap command at the given coordinates.
+
         Args:
-            coords: Coordinates to tap (x, y)
-            
+            coords: The (x, y) coordinates to tap.
+
         Returns:
-            bool: True if tap was successful, False otherwise
+            True if the tap was successful, False otherwise.
         """
         if not self.is_connected():
             logger.error("Not connected to device")
@@ -464,11 +458,10 @@ class BootstrapActionExecutor(BaseActionExecutor):
             return False
     
     def get_screen_config(self) -> Dict[str, Any]:
-        """
-        Get the current screen configuration.
-        
+        """Gets the current screen configuration.
+
         Returns:
-            Dict containing screen configuration details
+            A dictionary containing the screen configuration details.
         """
         return {
             'resolution': self.resolution,

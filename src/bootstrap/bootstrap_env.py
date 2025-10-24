@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 
 
 class GamePhase(Enum):
-    """Game phase enumeration for state tracking."""
+    """Enumeration for game phase state tracking."""
+
     MENU = "menu"
     LOADING = "loading"
     PLAYING = "playing"
@@ -46,7 +47,21 @@ class GamePhase(Enum):
 
 @dataclass
 class EnvironmentConfig:
-    """Configuration for BootstrapClashRoyaleEnv."""
+    """Configuration for the BootstrapClashRoyaleEnv.
+
+    Attributes:
+        window_name: The name of the window to capture.
+        roi: The region of interest to capture.
+        resolution: The resolution of the game.
+        jitter_range: The range of random jitter to add to clicks.
+        delay_range: The range of random delay to add between clicks.
+        max_step_time_ms: The maximum time allowed for a step.
+        action_delay_ms: The delay between actions.
+        card_names: A list of card names in the deck.
+        manual_outcome_input: Whether to use manual outcome input.
+        outcome_check_delay_seconds: The delay before checking for the outcome.
+    """
+
     # Screen capture settings
     window_name: str = "BlueStacks App Player 1"
     roi: Optional[Tuple[int, int, int, int]] = None
@@ -68,7 +83,7 @@ class EnvironmentConfig:
     outcome_check_delay_seconds: int = 120
     
     def __post_init__(self):
-        """Initialize default card names if not provided."""
+        """Initializes default card names if not provided."""
         if self.card_names is None:
             # Load default deck from deck.json
             try:
@@ -83,42 +98,41 @@ class EnvironmentConfig:
 
 
 class BootstrapClashRoyaleEnv(gym.Env):
+    """A Gymnasium environment for the Bootstrap phase of the Clash Royale AI.
+
+    This environment integrates all Phase 0 components, including screen
+    capture, card detection, perception, state building, and action execution.
+    It uses a simplified state and reward structure, which will be upgraded in
+    Phase 1.
+
+    Attributes:
+        action_space: The action space, a MultiDiscrete space with dimensions
+            for card slot, grid x-coordinate, and grid y-coordinate.
+        observation_space: The observation space, a Box space representing the
+            53-dimensional state vector.
+        config: The environment configuration.
+        capture: The screen capture component.
+        card_matcher: The card detection component.
+        perception: The perception component for elixir and tower health.
+        state_builder: The state vector construction component.
+        executor: The action execution component.
     """
-    Bootstrap Clash Royale Environment for Phase 0.
-    
-    This class implements a Gymnasium environment that integrates all Phase 0 components:
-    - BootstrapCapture for screen capture
-    - TemplateCardMatcher for card detection
-    - MinimalPerception for elixir and tower health OCR
-    - MinimalStateBuilder for state vector construction
-    - BootstrapActionExecutor for ADB-based action execution
-    
-    Phase 0 environment uses simplified state and reward; upgraded in Phase 1
-    
-    Action Space: MultiDiscrete([4, 32, 18])
-    - card_slot: 0-3 (4 visible cards)
-    - grid_x: 0-31 (horizontal grid)
-    - grid_y: 0-17 (vertical grid)
-    
-    Observation Space: Box(low=-1, high=1, shape=(53,), dtype=np.float32)
-    - 53-dimensional state vector from Phase 0
-    """
-    
+
     metadata = {
         'render_modes': ['human', 'rgb_array'],
         'render_fps': 30
     }
     
     def __init__(self, config: Optional[EnvironmentConfig] = None, render_mode: Optional[str] = None):
-        """
-        Initialize the BootstrapClashRoyaleEnv.
-        
+        """Initializes the BootstrapClashRoyaleEnv.
+
         Args:
-            config: Environment configuration
-            render_mode: Render mode ('human', 'rgb_array', or None)
-            
+            config: The environment configuration.
+            render_mode: The render mode ('human', 'rgb_array', or None).
+
         Raises:
-            ValueError: If render_mode is invalid or card_names is incorrect
+            ValueError: If the render_mode is invalid or card_names is
+                incorrect.
         """
         super().__init__()
         
@@ -204,19 +218,18 @@ class BootstrapClashRoyaleEnv(gym.Env):
         logger.info(f"BootstrapClashRoyaleEnv initialized with {len(self.config.card_names)} cards")
     
     def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """
-        Reset the environment to start a new episode.
-        
-        Environment Flow:
-        1. Wait for menu → Click battle → Wait for match start
-        2. Return initial state
-        
+        """Resets the environment to start a new episode.
+
+        This method handles the environment flow of starting a new game, which
+        includes waiting for the menu, clicking the battle button, and waiting
+        for the match to start.
+
         Args:
-            seed: Random seed for reproducibility
-            options: Additional options for reset
-            
+            seed: A random seed for reproducibility.
+            options: Additional options for resetting the environment.
+
         Returns:
-            Tuple of (observation, info)
+            A tuple containing the initial observation and an info dictionary.
         """
         super().reset(seed=seed)
         
@@ -270,17 +283,19 @@ class BootstrapClashRoyaleEnv(gym.Env):
             return obs, info
     
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
-        """
-        Execute one step in the environment.
-        
-        Environment Flow:
-        1. Execute action → Wait → Capture frame → Build state → Compute reward → Check done
-        
+        """Executes one step in the environment.
+
+        This method follows the flow of executing an action, waiting, capturing
+        the frame, building the state, computing the reward, and checking if the
+        episode is done.
+
         Args:
-            action: Action to take as numpy array [card_slot, grid_x, grid_y]
-            
+            action: The action to take, as a NumPy array with the format
+                [card_slot, grid_x, grid_y].
+
         Returns:
-            Tuple of (observation, reward, terminated, truncated, info)
+            A tuple containing the observation, reward, terminated flag,
+            truncated flag, and an info dictionary.
         """
         #time.sleep(1.0)  # Ensure minimum delay between actions
         if self._game_phase == GamePhase.ENDED:
@@ -430,10 +445,19 @@ class BootstrapClashRoyaleEnv(gym.Env):
             
             return obs, reward, terminated, truncated, info
     
-    def render(self):
-        """Render the environment."""
+    def render(self) -> Optional[np.ndarray]:
+        """Renders the environment.
+
+        If the render mode is 'human', this method displays the current frame in
+        an OpenCV window. If the render mode is 'rgb_array', it returns the
+        frame as an RGB array.
+
+        Returns:
+            The frame as an RGB array if the render mode is 'rgb_array',
+            otherwise None.
+        """
         if self.render_mode is None:
-            return
+            return None
         
         try:
             # Get current frame
@@ -453,7 +477,11 @@ class BootstrapClashRoyaleEnv(gym.Env):
             logger.error(f"Render failed: {e}")
     
     def close(self):
-        """Close the environment and clean up resources."""
+        """Closes the environment and cleans up resources.
+
+        This method stops the screen capture, disconnects the action executor,
+        and closes any OpenCV windows.
+        """
         try:
             # Stop capture
             if hasattr(self, 'capture') and self.capture.is_capturing:
@@ -473,9 +501,8 @@ class BootstrapClashRoyaleEnv(gym.Env):
             logger.error(f"Error during close: {e}")
     
     def _navigate_to_battle(self):
-        """Navigate from menu to battle and wait for match start."""
+        """Navigates from the menu to a battle and waits for the match to start."""
         logger.info("Navigating to battle...")
-        
         # This is a simplified implementation for Phase 0
         # In Phase 0, we assume the user will manually navigate to battles
         # or the agent will train in whatever state it finds
@@ -502,13 +529,14 @@ class BootstrapClashRoyaleEnv(gym.Env):
             logger.warning(f"Could not get current state for logging: {e}")
     
     def _get_current_state(self) -> np.ndarray:
-        """
-        Get the current state from all perception components.
-        Uses rate limiting to avoid continuous OCR and template matching.
-        
+        """Gets the current state from all perception components.
+
+        This method uses rate limiting to avoid continuous OCR and template
+        matching.
+
         Returns:
-            53-dimensional state vector
-        """       
+            The 53-dimensional state vector.
+        """
         try:
             # Capture frame
             frame = self.capture.grab()
@@ -571,16 +599,15 @@ class BootstrapClashRoyaleEnv(gym.Env):
             return np.zeros(53, dtype=np.float32)
     
     def _validate_action(self, card_slot: int, grid_x: int, grid_y: int) -> bool:
-        """
-        Validate the action parameters.
-        
+        """Validates the action parameters.
+
         Args:
-            card_slot: Card slot (0-3 for cards, 4 for no action)
-            grid_x: Grid X coordinate (0-31)
-            grid_y: Grid Y coordinate (0-17)
-            
+            card_slot: The card slot (0-3 for cards, 4 for no action).
+            grid_x: The grid x-coordinate (0-31).
+            grid_y: The grid y-coordinate (0-17).
+
         Returns:
-            True if action is valid, False otherwise
+            True if the action is valid, False otherwise.
         """
         # Check for "no action" option
         if card_slot == 4:
@@ -651,16 +678,15 @@ class BootstrapClashRoyaleEnv(gym.Env):
         return True
     
     def _execute_action(self, card_slot: int, grid_x: int, grid_y: int) -> bool:
-        """
-        Execute the action via the action executor.
-        
+        """Executes the action via the action executor.
+
         Args:
-            card_slot: Card slot (0-3)
-            grid_x: Grid X coordinate (0-31)
-            grid_y: Grid Y coordinate (0-17)
-            
+            card_slot: The card slot (0-3).
+            grid_x: The grid x-coordinate (0-31).
+            grid_y: The grid y-coordinate (0-17).
+
         Returns:
-            True if action was executed successfully, False otherwise
+            True if the action was executed successfully, False otherwise.
         """
         try:
             # Handle "no action" case - don't execute anything
@@ -681,11 +707,10 @@ class BootstrapClashRoyaleEnv(gym.Env):
             return False
     
     def _get_tower_health(self) -> Dict[str, List[int]]:
-        """
-        Get current tower health for reward calculation.
-        
+        """Gets the current tower health for reward calculation.
+
         Returns:
-            Dictionary with tower health values
+            A dictionary with tower health values.
         """
         if self._last_tower_health is None:
             return {
@@ -695,23 +720,22 @@ class BootstrapClashRoyaleEnv(gym.Env):
         
         return self._last_tower_health
     
-    def _calculate_reward(self, 
-                         prev_tower_health: Dict[str, List[int]], 
-                         action_success: bool) -> Tuple[float, bool, bool]:
-        """
-        Calculate reward based on tower damage and game outcome.
-        
-        Basic reward function:
-        - Terminal: +1.0 (win), -1.0 (loss)
-        - Shaping: +0.1 per enemy tower damage, -0.1 per friendly tower damage
-        - Small penalty for failed actions
-        
+    def _calculate_reward(self,
+                          prev_tower_health: dict[str, list[int]],
+                          action_success: bool) -> tuple[float, bool, bool]:
+        """Calculates the reward based on tower damage and game outcome.
+
+        The basic reward function is as follows:
+        - Terminal: +1.0 for a win, -1.0 for a loss.
+        - Shaping: +0.1 per enemy tower damage, -0.1 per friendly tower damage.
+        - A small penalty for failed actions.
+
         Args:
-            prev_tower_health: Previous tower health values
-            action_success: Whether the action was executed successfully
-            
+            prev_tower_health: The previous tower health values.
+            action_success: Whether the action was executed successfully.
+
         Returns:
-            Tuple of (reward, terminated, truncated)
+            A tuple containing the reward, terminated flag, and truncated flag.
         """
         reward = 0.0
         terminated = False
@@ -822,11 +846,10 @@ class BootstrapClashRoyaleEnv(gym.Env):
         return reward, terminated, truncated
     
     def get_performance_metrics(self) -> Dict[str, Any]:
-        """
-        Get performance metrics for the environment.
-        
+        """Gets performance metrics for the environment.
+
         Returns:
-            Dictionary with performance metrics
+            A dictionary with performance metrics.
         """
         metrics = {
             'episode_count': self._episode_count,
@@ -844,11 +867,10 @@ class BootstrapClashRoyaleEnv(gym.Env):
         return metrics
     
     def _request_manual_outcome(self) -> Optional[str]:
-        """
-        Request manual outcome input from user for Phase 0 training.
-        
+        """Requests manual outcome input from the user for Phase 0 training.
+
         Returns:
-            'win', 'loss', 'continue', or None
+            'win', 'loss', 'continue', or None.
         """
         logger.info("=" * 50)
         logger.info("MANUAL OUTCOME INPUT REQUIRED")
@@ -884,11 +906,13 @@ class BootstrapClashRoyaleEnv(gym.Env):
             return None
     
     def set_manual_outcome(self, outcome: str) -> None:
-        """
-        Set manual outcome programmatically (for testing or automated input).
-        
+        """Sets the manual outcome programmatically.
+
+        This method is useful for testing or automated input.
+
         Args:
-            outcome: 'win', 'loss', or 'continue'
+            outcome: The outcome to set, which can be 'win', 'loss', or
+                'continue'.
         """
         if outcome in ['win', 'loss', 'continue']:
             self._pending_outcome = outcome

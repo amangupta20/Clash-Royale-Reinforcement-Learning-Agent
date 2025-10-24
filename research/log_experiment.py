@@ -23,15 +23,33 @@ INDEX_FILE = RESEARCH_DIR / "experiments.jsonl"
 
 
 def _timestamp_now() -> str:
+    """Gets the current timestamp as a string.
+
+    Returns:
+        The current timestamp in the format YYYYMMDD_HHMMSS.
+    """
     return dt.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def _slugify(name: str) -> str:
+    """Slugifies a string.
+
+    Args:
+        name: The string to slugify.
+
+    Returns:
+        The slugified string.
+    """
     keep = [c if c.isalnum() or c in ("-", "_") else "-" for c in name.strip().lower()]
     return "".join(keep).strip("-") or "run"
 
 
 def _git_commit() -> str | None:
+    """Gets the current Git commit hash.
+
+    Returns:
+        The Git commit hash as a string, or None if it cannot be determined.
+    """
     try:
         out = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(ROOT), stderr=subprocess.DEVNULL)
         return out.decode().strip()
@@ -40,6 +58,11 @@ def _git_commit() -> str | None:
 
 
 def _python_env() -> Dict[str, Any]:
+    """Gets information about the Python environment.
+
+    Returns:
+        A dictionary with information about the Python environment.
+    """
     return {
         "python": sys.version,
         "executable": sys.executable,
@@ -48,6 +71,11 @@ def _python_env() -> Dict[str, Any]:
 
 
 def _os_env() -> Dict[str, Any]:
+    """Gets information about the OS environment.
+
+    Returns:
+        A dictionary with information about the OS environment.
+    """
     return {
         "os_name": os.name,
         "env_sample": {k: os.environ.get(k) for k in [
@@ -57,10 +85,26 @@ def _os_env() -> Dict[str, Any]:
 
 
 def _write_json(path: pathlib.Path, obj: Dict[str, Any]) -> None:
+    """Writes a dictionary to a JSON file.
+
+    Args:
+        path: The path to the JSON file.
+        obj: The dictionary to write.
+    """
     path.write_text(json.dumps(obj, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _copy_artifact(src: pathlib.Path, dst_dir: pathlib.Path) -> str:
+    """Copies an artifact to a destination directory.
+
+    Args:
+        src: The path to the source artifact.
+        dst_dir: The path to the destination directory.
+
+    Returns:
+        The relative path of the copied artifact with respect to the research
+        directory.
+    """
     dst_dir.mkdir(parents=True, exist_ok=True)
     dst = dst_dir / src.name
     shutil.copy2(src, dst)
@@ -68,6 +112,7 @@ def _copy_artifact(src: pathlib.Path, dst_dir: pathlib.Path) -> str:
 
 
 def main() -> None:
+    """The main function."""
     ap = argparse.ArgumentParser(description="Log an experiment run")
     ap.add_argument("--name", required=True, help="Short name/slug for the run")
     ap.add_argument("--config", required=True, help="Path to config JSON")
