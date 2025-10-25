@@ -36,29 +36,45 @@ DEPLOY_WEIGHTS = {
     6: 1,  # Right high top
 }
 
-def adb_tap(x, y):
-    """
-    Executes an ADB tap command at the given (x, y) coordinates.
+def adb_tap(x: int, y: int) -> None:
+    """Executes an ADB tap command at the given (x, y) coordinates.
+
     This function requires ADB to be installed and configured on the system.
+
+    Args:
+        x: The x-coordinate of the tap location.
+        y: The y-coordinate of the tap location.
     """
     subprocess.run(['adb', 'shell', 'input', 'tap', str(x), str(y)])
     time.sleep(0.1)
 
-def add_randomness(coord, offset=5):
-    """
-    Adds a small amount of randomness to a coordinate to simulate human-like input.
-    
+def add_randomness(coord: tuple[int, int], offset: int = 5) -> tuple[int, int]:
+    """Adds a small amount of randomness to a coordinate.
+
+    This function helps simulate human-like input by introducing slight
+    variations to the tap coordinates.
+
     Args:
-        coord (tuple): The (x, y) coordinate.
-        offset (int): The maximum offset to add to the coordinate.
+        coord: The (x, y) coordinate.
+        offset: The maximum offset to add to the coordinate.
+
+    Returns:
+        The new coordinate with added randomness.
     """
     x, y = coord
     return (x + random.randint(-offset, offset), y + random.randint(-offset, offset))
 
-def update_weights(weights):
-    """
-    Randomly adjusts the deployment weights to create a more dynamic deployment strategy.
-    This prevents the deployment from becoming too predictable.
+def update_weights(weights: dict[int, int]) -> dict[int, int]:
+    """Randomly adjusts the deployment weights.
+
+    This function helps create a more dynamic deployment strategy by preventing
+    the deployment from becoming too predictable.
+
+    Args:
+        weights: The current deployment weights.
+
+    Returns:
+        The updated deployment weights.
     """
     new_weights = weights.copy()
     
@@ -72,20 +88,25 @@ def update_weights(weights):
     
     return new_weights
 
-def deploy_card(card_slot=None, deploy_position=None, weights=None):
-    """
-    Deploys a card from a given slot to a given position.
-    
-    If the card slot is not specified, a random slot is chosen.
-    If the deployment position is not specified, a random position is chosen based on the weights.
-    
+def deploy_card(
+    card_slot: int | None = None,
+    deploy_position: int | None = None,
+    weights: dict[int, int] | None = None,
+) -> tuple[int, int, dict[int, int]]:
+    """Deploys a card from a given slot to a given position.
+
+    If the card slot is not specified, a random slot is chosen. If the
+    deployment position is not specified, a random position is chosen based on
+    the weights.
+
     Args:
-        card_slot (int, optional): The card slot to deploy from (1-4).
-        deploy_position (int, optional): The position to deploy to (1-6).
-        weights (dict, optional): The weights to use for random deployment.
+        card_slot: The card slot to deploy from (1-4).
+        deploy_position: The position to deploy to (1-6).
+        weights: The weights to use for random deployment.
 
     Returns:
-        A tuple containing the card slot used, the deployment position used, and the updated weights.
+        A tuple containing the card slot used, the deployment position used, and
+        the updated weights.
     """
     if weights is None:
         weights = DEPLOY_WEIGHTS.copy()
@@ -117,14 +138,26 @@ def deploy_card(card_slot=None, deploy_position=None, weights=None):
     updated_weights = update_weights(weights)
     return card_slot, deploy_position, updated_weights
 
-def get_card_positions():
-    """Returns a copy of the card position dictionary."""
+def get_card_positions() -> dict[int, tuple[int, int]]:
+    """Returns a copy of the card position dictionary.
+
+    Returns:
+        A dictionary mapping card slots to their (x, y) coordinates.
+    """
     return CARD_POSITIONS.copy()
 
-def get_deploy_positions():
-    """Returns a copy of the deployment position dictionary."""
+def get_deploy_positions() -> dict[int, tuple[int, int]]:
+    """Returns a copy of the deployment position dictionary.
+
+    Returns:
+        A dictionary mapping deployment positions to their (x, y) coordinates.
+    """
     return DEPLOY_POSITIONS.copy()
 
-def get_deploy_weights():
-    """Returns a copy of the default deployment weights."""
+def get_deploy_weights() -> dict[int, int]:
+    """Returns a copy of the default deployment weights.
+
+    Returns:
+        A dictionary mapping deployment positions to their weights.
+    """
     return DEPLOY_WEIGHTS.copy()

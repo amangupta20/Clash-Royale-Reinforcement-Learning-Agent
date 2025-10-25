@@ -30,20 +30,21 @@ logger = logging.getLogger(__name__)
 
 
 class CardEncoder(nn.Module):
+    """A shared encoder for processing 10-dimensional card features.
+
+    This module takes card features, including the card ID, 8 attributes, and
+    elixir cost, and produces a 16-dimensional embedding for each card.
+
+    Attributes:
+        layers: A sequential container of layers for the encoder.
     """
-    Shared card encoder that processes 10-dimensional card features.
-    
-    Takes card features [card_id, 8 attributes, elixir_cost] and produces
-    a 16-dimensional embedding for each card.
-    """
-    
+
     def __init__(self, input_dim: int = 10, embedding_dim: int = 16):
-        """
-        Initialize the card encoder.
-        
+        """Initializes the card encoder.
+
         Args:
-            input_dim: Dimension of input card features (default: 10)
-            embedding_dim: Dimension of output embedding (default: 16)
+            input_dim: The dimension of the input card features (default: 10).
+            embedding_dim: The dimension of the output embedding (default: 16).
         """
         super().__init__()
         self.layers = nn.Sequential(
@@ -53,32 +54,33 @@ class CardEncoder(nn.Module):
         )
     
     def forward(self, cards: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the card encoder.
-        
+        """Performs a forward pass through the card encoder.
+
         Args:
-            cards: Card features tensor of shape (batch_size, 4, 10)
-            
+            cards: A tensor of card features with shape (batch_size, 4, 10).
+
         Returns:
-            Card embeddings tensor of shape (batch_size, 4, 16)
+            A tensor of card embeddings with shape (batch_size, 4, 16).
         """
         return self.layers(cards)
 
 
 class GlobalProcessor(nn.Module):
+    """A processor for the 13-dimensional global state features.
+
+    This module processes global state features, including elixir, time, tower
+    health, and phase indicators.
+
+    Attributes:
+        layers: A sequential container of layers for the processor.
     """
-    Global state processor that handles 13-dimensional global features.
-    
-    Processes global state including elixir, time, tower health, and phase indicators.
-    """
-    
+
     def __init__(self, input_dim: int = 13, output_dim: int = 64):
-        """
-        Initialize the global processor.
-        
+        """Initializes the global processor.
+
         Args:
-            input_dim: Dimension of input global state (default: 13)
-            output_dim: Dimension of output representation (default: 64)
+            input_dim: The dimension of the input global state (default: 13).
+            output_dim: The dimension of the output representation (default: 64).
         """
         super().__init__()
         self.layers = nn.Sequential(
@@ -87,44 +89,49 @@ class GlobalProcessor(nn.Module):
         )
     
     def forward(self, global_state: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the global processor.
-        
+        """Performs a forward pass through the global processor.
+
         Args:
-            global_state: Global state tensor of shape (batch_size, 13)
-            
+            global_state: A tensor of the global state with shape
+                (batch_size, 13).
+
         Returns:
-            Global representation tensor of shape (batch_size, 64)
+            A tensor of the global representation with shape (batch_size, 64).
         """
         return self.layers(global_state)
 
 
 class StructuredMLPPolicy(nn.Module, Policy):
+    """A structured MLP policy with a shared card encoder for Clash Royale.
+
+    This policy processes the 53-dimensional state vector by separating the
+    global and hand state processing and using a shared card encoder for
+    efficient learning. The architecture is as follows:
+    1.  The 53-dimensional state is split into global (13) and hand (40)
+        components.
+    2.  The global state is processed with a GlobalProcessor, resulting in a
+        64-dimensional representation.
+    3.  The four cards in the hand are processed with a shared CardEncoder,
+        resulting in a 4x16=64-dimensional representation.
+    4.  The representations are fused and processed through final layers.
+    5.  Action logits are produced for a MultiDiscrete action space with
+        dimensions for card slot (0-3), grid x-coordinate (0-31), and grid
+        y-coordinate (0-17).
+
+    Attributes:
+        global_processor: The processor for the global state.
+        card_encoder: The shared encoder for the card features.
+        fusion_layer: The layer that fuses the global and card representations.
+        card_head: The output layer for the card selection logits.
+        x_head: The output layer for the x-coordinate logits.
+        y_head: The output layer for the y-coordinate logits.
     """
-    Structured MLP policy with shared card encoder for Clash Royale.
-    
-    This policy processes the 53-dimensional state vector by separating global
-    and hand state processing, using a shared card encoder for efficient learning.
-    
-    Architecture:
-    1. Split 53-dim state into global (13) and hand (40) components
-    2. Process global state with GlobalProcessor → 64-dim representation
-    3. Process 4 cards with shared CardEncoder → 4×16=64-dim representation
-    4. Fuse representations and process through final layers
-    5. Output action logits for MultiDiscrete([4, 32, 18]) action space
-    
-    Action Space:
-    - card_slot: 0-3 (4 visible cards)
-    - grid_x: 0-31 (horizontal grid)
-    - grid_y: 0-17 (vertical grid)
-    """
-    
+
     def __init__(self, config: Optional[PolicyConfig] = None):
-        """
-        Initialize the structured MLP policy.
-        
+        """Initializes the structured MLP policy.
+
         Args:
-            config: Policy configuration (optional)
+            config: The policy configuration.
         """
         # Initialize Policy interface
         if config is None:
@@ -181,7 +188,7 @@ class StructuredMLPPolicy(nn.Module, Policy):
         self.to(self.device)
     
     def _initialize_weights(self):
-        """Initialize network weights using Xavier uniform initialization."""
+        """Initializes the network weights using Xavier uniform initialization."""
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
@@ -189,14 +196,14 @@ class StructuredMLPPolicy(nn.Module, Policy):
                     nn.init.zeros_(module.bias)
     
     def forward(self, state: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the policy network.
-        
+        """Performs a forward pass through the policy network.
+
         Args:
-            state: State tensor of shape (batch_size, 53)
-            
+            state: A state tensor with shape (batch_size, 53).
+
         Returns:
-            Action logits tensor of shape (batch_size, 4, 32, 18)
+            A tuple of tensors representing the action logits for card, x, and
+            y.
         """
         # Split state into global and hand components
         global_state = state[:, :self.global_input_dim]  # (batch_size, 13)
@@ -231,44 +238,43 @@ class StructuredMLPPolicy(nn.Module, Policy):
         return card_logits, x_logits, y_logits
     
     def get_action_logits(self, state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Get action logits for each action dimension.
-        
+        """Gets the action logits for each action dimension.
+
         Args:
-            state: State tensor of shape (batch_size, 53)
-            
+            state: A state tensor with shape (batch_size, 53).
+
         Returns:
-            Tuple of (card_logits, x_logits, y_logits) tensors
+            A tuple of tensors representing the action logits for card, x, and
+            y.
         """
         return self.forward(state)
     
     def _apply_action_masking(self, card_logits: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        """
-        Apply action masking to prevent selecting unavailable cards.
-        
-        Cards are only visible when they're playable (have enough elixir),
-        so we don't need to apply any masking.
-        
+        """Applies action masking to prevent selecting unavailable cards.
+
+        In the current implementation, cards are only visible when they are
+        playable (i.e., the player has enough elixir), so no masking is needed.
+
         Args:
-            card_logits: Card selection logits of shape (batch_size, 4)
-            state: State tensor of shape (batch_size, 53)
-            
+            card_logits: The card selection logits, with shape (batch_size, 4).
+            state: The state tensor, with shape (batch_size, 53).
+
         Returns:
-            Unmasked card logits
+            The unmasked card logits.
         """
         # No masking needed since cards are only visible when playable
         return card_logits
     
     def act(self, state: np.ndarray, deterministic: Optional[bool] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """
-        Select an action given the current state.
-        
+        """Selects an action given the current state.
+
         Args:
-            state: Current state as numpy array of shape (53,)
-            deterministic: Whether to use deterministic action selection
-            
+            state: The current state as a NumPy array with shape (53,).
+            deterministic: Whether to use deterministic action selection.
+
         Returns:
-            Tuple of (action, info) where action is [card_slot, grid_x, grid_y]
+            A tuple containing the action and an info dictionary. The action is a
+            NumPy array with the format [card_slot, grid_x, grid_y].
         """
         if deterministic is None:
             deterministic = self.config.deterministic
@@ -353,11 +359,10 @@ class StructuredMLPPolicy(nn.Module, Policy):
         return action, info
     
     def save(self, path: str):
-        """
-        Save the policy to disk.
-        
+        """Saves the policy to disk.
+
         Args:
-            path: Path to save the policy
+            path: The path where to save the policy.
         """
         checkpoint = {
             'model_state_dict': self.state_dict(),
@@ -375,11 +380,10 @@ class StructuredMLPPolicy(nn.Module, Policy):
         torch.save(checkpoint, path)
     
     def load(self, path: str):
-        """
-        Load the policy from disk.
-        
+        """Loads the policy from disk.
+
         Args:
-            path: Path to load the policy from
+            path: The path from where to load the policy.
         """
         try:
             # Try with weights_only=True first (PyTorch 2.6+ default)
@@ -397,11 +401,10 @@ class StructuredMLPPolicy(nn.Module, Policy):
             self.device = torch.device(self.config.device)
     
     def get_architecture_info(self) -> Dict[str, Any]:
-        """
-        Get information about the policy architecture.
-        
+        """Gets information about the policy architecture.
+
         Returns:
-            Dictionary containing architecture details
+            A dictionary containing the architecture details.
         """
         total_params = sum(p.numel() for p in self.parameters())
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -437,29 +440,27 @@ class StructuredMLPPolicy(nn.Module, Policy):
 
 # Factory function for creating policy instances
 def create_structured_mlp_policy(config: Optional[PolicyConfig] = None) -> StructuredMLPPolicy:
-    """
-    Create a structured MLP policy instance.
-    
+    """Creates a structured MLP policy instance.
+
     Args:
-        config: Policy configuration (optional)
-        
+        config: The policy configuration.
+
     Returns:
-        StructuredMLPPolicy instance
+        A `StructuredMLPPolicy` instance.
     """
     return StructuredMLPPolicy(config)
 
 
 # Performance test function
 def benchmark_policy(policy: StructuredMLPPolicy, num_samples: int = 1000) -> Dict[str, float]:
-    """
-    Benchmark policy inference performance.
-    
+    """Benchmarks the policy inference performance.
+
     Args:
-        policy: Policy instance to benchmark
-        num_samples: Number of samples for benchmarking
-        
+        policy: The policy instance to benchmark.
+        num_samples: The number of samples to use for benchmarking.
+
     Returns:
-        Dictionary with performance metrics
+        A dictionary with performance metrics.
     """
     policy.eval()
     

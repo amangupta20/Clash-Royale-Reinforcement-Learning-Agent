@@ -72,7 +72,12 @@ shutdown_requested = False
 
 
 def signal_handler(signum, frame):
-    """Handle Ctrl+C and other signals for clean shutdown."""
+    """Handles Ctrl+C and other signals for a clean shutdown.
+
+    Args:
+        signum: The signal number.
+        frame: The current stack frame.
+    """
     global shutdown_requested
     logger.info("Shutdown requested. Cleaning up...")
     shutdown_requested = True
@@ -84,12 +89,15 @@ signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
 
 
 def _save_exit_checkpoint(trainer, exit_reason: str):
-    """
-    Save checkpoint when exiting training (always called).
-    
+    """Saves a checkpoint when exiting training.
+
+    This function is always called upon exiting training to ensure progress is
+    saved.
+
     Args:
-        trainer: The trainer instance
-        exit_reason: Reason for exit ("shutdown", "interrupt", "error")
+        trainer: The trainer instance.
+        exit_reason: The reason for exiting, e.g., "shutdown", "interrupt",
+            or "error".
     """
     try:
         # Get current training info
@@ -137,11 +145,12 @@ def _save_exit_checkpoint(trainer, exit_reason: str):
 
 
 def setup_logging(log_dir: str = './logs/phase0_bootstrap') -> None:
-    """
-    Set up logging with file handler after directories are created.
-    
+    """Sets up logging with a file handler.
+
+    This function is called after the necessary directories have been created.
+
     Args:
-        log_dir: Directory for log files
+        log_dir: The directory for the log files.
     """
     # Create log directory
     Path(log_dir).mkdir(parents=True, exist_ok=True)
@@ -176,14 +185,13 @@ def setup_logging(log_dir: str = './logs/phase0_bootstrap') -> None:
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
-    """
-    Load configuration from YAML file.
-    
+    """Loads the configuration from a YAML file.
+
     Args:
-        config_path: Path to the configuration file
-        
+        config_path: The path to the configuration file.
+
     Returns:
-        Dictionary with configuration parameters
+        A dictionary with the configuration parameters.
     """
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -193,14 +201,13 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
 
 def find_latest_checkpoint(checkpoint_dir: str) -> Optional[str]:
-    """
-    Find the latest checkpoint in the directory.
-    
+    """Finds the latest checkpoint in the specified directory.
+
     Args:
-        checkpoint_dir: Directory to search for checkpoints
-        
+        checkpoint_dir: The directory to search for checkpoints.
+
     Returns:
-        Path to the latest checkpoint or None if not found
+        The path to the latest checkpoint, or None if no checkpoint is found.
     """
     import glob
     import os
@@ -227,11 +234,10 @@ def find_latest_checkpoint(checkpoint_dir: str) -> Optional[str]:
 
 
 def create_directories(config: Dict[str, Any]) -> None:
-    """
-    Create necessary directories for training.
-    
+    """Creates the necessary directories for training.
+
     Args:
-        config: Configuration dictionary
+        config: The configuration dictionary.
     """
     dirs_to_create = [
         config['training']['checkpoint_dir'],
@@ -246,45 +252,42 @@ def create_directories(config: Dict[str, Any]) -> None:
 
 
 def get_git_sha() -> str:
-    """
-    Get current git SHA for experiment tracking.
-    
+    """Gets the current Git SHA for experiment tracking.
+
     Returns:
-        Git SHA string or 'unknown' if git is not available
+        The Git SHA as a string, or 'unknown' if Git is not available.
     """
     try:
-        return subprocess.check_output(['git', 'rev-parse', 'HEAD'], 
+        return subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                     cwd=os.getcwd()).decode('ascii').strip()
     except:
         return "unknown"
 
 
 def calculate_config_hash(config: Dict[str, Any]) -> str:
-    """
-    Calculate hash of configuration for reproducibility.
-    
+    """Calculates a hash of the configuration for reproducibility.
+
     Args:
-        config: Configuration dictionary
-        
+        config: The configuration dictionary.
+
     Returns:
-        SHA hash of the configuration
+        The SHA hash of the configuration.
     """
     config_str = json.dumps(config, sort_keys=True)
     return hashlib.sha256(config_str.encode()).hexdigest()[:10]
 
 
-def log_experiment(config: Dict[str, Any], 
-                  git_sha: str, 
-                  config_hash: str, 
-                  results: Dict[str, Any]) -> None:
-    """
-    Log experiment details to experiments.jsonl.
-    
+def log_experiment(config: Dict[str, Any],
+                   git_sha: str,
+                   config_hash: str,
+                   results: Dict[str, Any]) -> None:
+    """Logs experiment details to experiments.jsonl.
+
     Args:
-        config: Configuration dictionary
-        git_sha: Git SHA
-        config_hash: Configuration hash
-        results: Training results
+        config: The configuration dictionary.
+        git_sha: The Git SHA.
+        config_hash: The configuration hash.
+        results: The training results.
     """
     experiment_entry = {
         'timestamp': datetime.now().strftime('%Y%m%d_%H%M%S'),
@@ -341,17 +344,15 @@ def log_experiment(config: Dict[str, Any],
 
 
 def create_env_config(config: Dict[str, Any]) -> EnvironmentConfig:
-    """
-    Create environment configuration from YAML config.
-    
+    """Creates an environment configuration from a YAML config.
+
     Args:
-        config: YAML configuration dictionary
-        
+        config: The YAML configuration dictionary.
+
     Returns:
-        EnvironmentConfig instance
+        An `EnvironmentConfig` instance.
     """
     env_config_dict = config['environment']
-    
     env_config = EnvironmentConfig(
         window_name=env_config_dict['window_name'],
         resolution=env_config_dict['resolution'],
@@ -371,14 +372,13 @@ def create_env_config(config: Dict[str, Any]) -> EnvironmentConfig:
 
 
 def create_ppo_config(config: Dict[str, Any]) -> PPOConfig:
-    """
-    Create PPO configuration from YAML config.
-    
+    """Creates a PPO configuration from a YAML config.
+
     Args:
-        config: YAML configuration dictionary
-        
+        config: The YAML configuration dictionary.
+
     Returns:
-        PPOConfig instance
+        A `PPOConfig` instance.
     """
     training_config = config['training']
     ppo_config_dict = config['ppo']
@@ -409,17 +409,15 @@ def create_ppo_config(config: Dict[str, Any]) -> PPOConfig:
 
 
 def setup_callbacks(config: Dict[str, Any]) -> list:
-    """
-    Set up training callbacks.
-    
+    """Sets up the training callbacks.
+
     Args:
-        config: Configuration dictionary
-        
+        config: The configuration dictionary.
+
     Returns:
-        List of callback instances
+        A list of callback instances.
     """
     callbacks = []
-    
     # Enhanced TensorBoard callback
     tensorboard_callback = Phase0TensorBoardCallback(
         verbose=1,
@@ -441,19 +439,18 @@ def setup_callbacks(config: Dict[str, Any]) -> list:
     return callbacks
 
 
-def train_model(config: Dict[str, Any], 
+def train_model(config: Dict[str, Any],
                 continue_training: bool = False,
                 checkpoint_path: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Train the model with the given configuration.
-    
+    """Trains the model with the given configuration.
+
     Args:
-        config: Configuration dictionary
-        continue_training: Whether to continue from checkpoint
-        checkpoint_path: Path to checkpoint to continue from
-        
+        config: The configuration dictionary.
+        continue_training: Whether to continue from a checkpoint.
+        checkpoint_path: The path to the checkpoint to continue from.
+
     Returns:
-        Dictionary with training results
+        A dictionary with the training results.
     """
     logger.info("Starting model training...")
     
@@ -598,12 +595,11 @@ def train_model(config: Dict[str, Any],
 
 
 def generate_learning_curves(config: Dict[str, Any], results: Dict[str, Any]) -> None:
-    """
-    Generate learning curves and visualizations.
-    
+    """Generates learning curves and visualizations.
+
     Args:
-        config: Configuration dictionary
-        results: Training results
+        config: The configuration dictionary.
+        results: The training results.
     """
     try:
         import matplotlib.pyplot as plt
@@ -645,7 +641,7 @@ def generate_learning_curves(config: Dict[str, Any], results: Dict[str, Any]) ->
 
 
 def main():
-    """Main training function."""
+    """The main training function."""
     parser = argparse.ArgumentParser(description='Phase 0 Bootstrap Training')
     parser.add_argument('--config', type=str,
                        default='research/configs/phase0_bootstrap.yaml',

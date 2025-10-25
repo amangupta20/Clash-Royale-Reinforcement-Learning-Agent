@@ -41,11 +41,38 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PPOConfig:
+    """Configuration for PPO training.
+
+    This class holds all the hyperparameters for the PPO algorithm. Phase 0
+    uses the Stable Baselines 3 default hyperparameters; tuning will be done in
+    Phase 3.
+
+    Attributes:
+        learning_rate: The learning rate for the Adam optimizer.
+        n_steps: The number of steps to run for each environment per update.
+        batch_size: The size of the mini-batch.
+        n_epochs: The number of epochs to train for when updating the policy.
+        gamma: The discount factor.
+        gae_lambda: The factor for trade-off of bias vs. variance for GAE.
+        clip_range: The clipping parameter for the PPO objective.
+        ent_coef: The entropy coefficient for the loss calculation.
+        vf_coef: The value function coefficient for the loss calculation.
+        max_grad_norm: The maximum value for the gradient clipping.
+        use_sde: Whether to use generalized State Dependent Exploration (gSDE).
+        sde_sample_freq: The frequency at which to sample from the gSDE distribution.
+        target_kl: The target KL divergence threshold.
+        tensorboard_log: The path to the directory where to save the TensorBoard logs.
+        policy_kwargs: Additional arguments to be passed to the policy on creation.
+        verbose: The verbosity level.
+        seed: The seed for the random number generators.
+        device: The device to use for training.
+        early_stopping: Whether to use early stopping.
+        early_stopping_patience: The number of steps to wait for improvement before stopping.
+        early_stopping_min_reward: The minimum reward threshold for early stopping.
+        checkpoint_freq: The frequency at which to save checkpoints.
+        checkpoint_dir: The directory where to save the checkpoints.
     """
-    Configuration for PPO training.
-    
-    Phase 0 uses SB3 default hyperparameters; tuning in Phase 3
-    """
+
     learning_rate: float = 3e-4
     n_steps: int = 2048
     batch_size: int = 64
@@ -76,13 +103,19 @@ class PPOConfig:
 
 
 class BootstrapActorCriticPolicy(ActorCriticPolicy):
+    """Custom actor-critic policy for the bootstrap agent.
+
+    This policy uses the StructuredMLPPolicy as a feature extractor and combines
+    it with a value head to create an actor-critic architecture suitable for PPO
+    training.
+
+    Attributes:
+        structured_policy: The StructuredMLPPolicy instance used as the feature
+            extractor and for generating action logits.
+        value_head: A neural network that estimates the value function from the
+            extracted features.
     """
-    Custom actor-critic policy that uses StructuredMLPPolicy as feature extractor.
-    
-    This policy combines the StructuredMLPPolicy from T011 with a value head
-    to create an actor-critic architecture suitable for PPO training.
-    """
-    
+
     def __init__(
         self,
         observation_space: gym.spaces.Space,
@@ -93,17 +126,18 @@ class BootstrapActorCriticPolicy(ActorCriticPolicy):
         *args,
         **kwargs,
     ):
-        """
-        Initialize the BootstrapActorCriticPolicy.
-        
+        """Initializes the BootstrapActorCriticPolicy.
+
         Args:
-            observation_space: Observation space
-            action_space: Action space
-            lr_schedule: Learning rate schedule
-            net_arch: Network architecture (ignored, using StructuredMLPPolicy)
-            activation_fn: Activation function (ignored, using StructuredMLPPolicy)
-            *args: Additional arguments
-            **kwargs: Additional keyword arguments
+            observation_space: The observation space.
+            action_space: The action space.
+            lr_schedule: The learning rate schedule.
+            net_arch: The network architecture (ignored, as this policy uses
+                the StructuredMLPPolicy).
+            activation_fn: The activation function (ignored, as this policy
+                uses the StructuredMLPPolicy).
+            *args: Additional arguments for the parent class.
+            **kwargs: Additional keyword arguments for the parent class.
         """
         # Remove unused arguments
         kwargs.pop('features_extractor_class', None)
@@ -140,7 +174,7 @@ class BootstrapActorCriticPolicy(ActorCriticPolicy):
         self._initialize_weights()
     
     def _initialize_weights(self):
-        """Initialize network weights."""
+        """Initializes the network weights."""
         # Initialize value head
         for module in self.value_head.modules():
             if isinstance(module, nn.Linear):
@@ -149,15 +183,14 @@ class BootstrapActorCriticPolicy(ActorCriticPolicy):
                     nn.init.zeros_(module.bias)
     
     def forward(self, obs: torch.Tensor, deterministic: bool = False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass through the policy.
-        
+        """Performs a forward pass through the policy.
+
         Args:
-            obs: Observation tensor
-            deterministic: Whether to use deterministic actions
-            
+            obs: The observation tensor.
+            deterministic: Whether to use deterministic actions.
+
         Returns:
-            Tuple of (actions, values, log_prob)
+            A tuple containing the actions, values, and log probabilities.
         """
         # Extract features using StructuredMLPPolicy
         features = self._extract_features(obs)
@@ -248,14 +281,13 @@ class BootstrapActorCriticPolicy(ActorCriticPolicy):
         return actions, values, action_log_prob
     
     def _extract_features(self, obs: torch.Tensor) -> torch.Tensor:
-        """
-        Extract features using the StructuredMLPPolicy.
-        
+        """Extracts features using the StructuredMLPPolicy.
+
         Args:
-            obs: Observation tensor
-            
+            obs: The observation tensor.
+
         Returns:
-            Feature tensor
+            The feature tensor.
         """
         # Get the fused representation from StructuredMLPPolicy
         with torch.no_grad():
@@ -273,15 +305,14 @@ class BootstrapActorCriticPolicy(ActorCriticPolicy):
         return features
     
     def evaluate_actions(self, obs: torch.Tensor, actions: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Evaluate actions for PPO training.
-        
+        """Evaluates actions for PPO training.
+
         Args:
-            obs: Observation tensor
-            actions: Action tensor
-            
+            obs: The observation tensor.
+            actions: The action tensor.
+
         Returns:
-            Tuple of (values, log_prob, entropy)
+            A tuple containing the values, log probabilities, and entropy.
         """
         # Extract features
         features = self._extract_features(obs)
@@ -346,19 +377,18 @@ class BootstrapActorCriticPolicy(ActorCriticPolicy):
         
         return values, action_log_prob, entropy
     
-    def predict(self, obs: Union[np.ndarray, Dict[str, np.ndarray]], state: Optional[Tuple[np.ndarray, ...]] = None, 
+    def predict(self, obs: Union[np.ndarray, Dict[str, np.ndarray]], state: Optional[Tuple[np.ndarray, ...]] = None,
                 episode_start: Optional[np.ndarray] = None, deterministic: bool = False) -> Tuple[np.ndarray, Optional[Tuple[np.ndarray, ...]]]:
-        """
-        Predict actions for given observations.
-        
+        """Predicts actions for given observations.
+
         Args:
-            obs: Observation
-            state: Latent state (unused)
-            episode_start: Episode start indicator (unused)
-            deterministic: Whether to use deterministic actions
-            
+            obs: The observation.
+            state: The latent state (unused).
+            episode_start: The episode start indicator (unused).
+            deterministic: Whether to use deterministic actions.
+
         Returns:
-            Tuple of (actions, states)
+            A tuple containing the predicted actions and states.
         """
         # Convert observation to tensor if needed
         if isinstance(obs, np.ndarray):
@@ -383,21 +413,25 @@ class BootstrapActorCriticPolicy(ActorCriticPolicy):
 
 
 class CheckpointCallback(BaseCallback):
+    """A callback for saving checkpoints with metadata.
+
+    Attributes:
+        save_freq: The frequency at which to save checkpoints.
+        save_path: The directory where to save the checkpoints.
+        save_replay_buffer: Whether to save the replay buffer.
+        git_sha: The Git SHA of the current commit.
     """
-    Callback for saving checkpoints with metadata.
-    """
-    
-    def __init__(self, save_freq: int, save_path: str, save_replay_buffer: bool = False, 
+
+    def __init__(self, save_freq: int, save_path: str, save_replay_buffer: bool = False,
                  verbose: int = 1, **kwargs):
-        """
-        Initialize checkpoint callback.
-        
+        """Initializes the checkpoint callback.
+
         Args:
-            save_freq: Save frequency in steps
-            save_path: Directory to save checkpoints
-            save_replay_buffer: Whether to save replay buffer
-            verbose: Verbosity level
-            **kwargs: Additional arguments
+            save_freq: The frequency at which to save checkpoints, in steps.
+            save_path: The directory where to save the checkpoints.
+            save_replay_buffer: Whether to save the replay buffer.
+            verbose: The verbosity level.
+            **kwargs: Additional arguments for the parent class.
         """
         super().__init__(verbose)
         self.save_freq = save_freq
@@ -415,15 +449,19 @@ class CheckpointCallback(BaseCallback):
             self.git_sha = "unknown"
     
     def set_training_env(self, training_env):
-        """Set the training environment for the callback."""
+        """Sets the training environment for the callback."""
         self.training_env = training_env
-    
+
     def set_model(self, model):
-        """Set the model for the callback."""
+        """Sets the model for the callback."""
         self.model = model
-    
+
     def _on_step(self) -> bool:
-        """Called at each step."""
+        """This method is called at each step of the training.
+
+        Returns:
+            True to continue training, False to stop.
+        """
         if self.n_calls % self.save_freq == 0:
             # Save checkpoint
             checkpoint_path = self.save_path / f"ppo_checkpoint_{self.n_calls}_steps"
@@ -464,19 +502,25 @@ class CheckpointCallback(BaseCallback):
 
 
 class EarlyStoppingCallback(BaseCallback):
+    """A callback for early stopping based on reward plateau.
+
+    Attributes:
+        patience: The number of steps to wait for improvement before stopping.
+        min_reward: The minimum reward threshold for early stopping.
+        best_mean_reward: The best mean reward seen so far.
+        last_improvement: The step at which the last improvement was seen.
+        no_improvement_count: The number of steps with no improvement.
     """
-    Callback for early stopping based on reward plateau.
-    """
-    
+
     def __init__(self, patience: int, min_reward: float = 0.5, verbose: int = 1, **kwargs):
-        """
-        Initialize early stopping callback.
-        
+        """Initializes the early stopping callback.
+
         Args:
-            patience: Number of steps to wait for improvement
-            min_reward: Minimum reward threshold
-            verbose: Verbosity level
-            **kwargs: Additional arguments
+            patience: The number of steps to wait for improvement before
+                stopping.
+            min_reward: The minimum reward threshold for early stopping.
+            verbose: The verbosity level.
+            **kwargs: Additional arguments for the parent class.
         """
         super().__init__(verbose)
         self.patience = patience
@@ -486,7 +530,11 @@ class EarlyStoppingCallback(BaseCallback):
         self.no_improvement_count = 0
     
     def _on_step(self) -> bool:
-        """Called at each step."""
+        """This method is called at each step of the training.
+
+        Returns:
+            True to continue training, False to stop.
+        """
         # Check if we have reward information
         if 'rewards' in self.locals:
             current_mean_reward = np.mean(self.locals['rewards'])
@@ -514,24 +562,31 @@ class EarlyStoppingCallback(BaseCallback):
 
 
 class BootstrapPPOTrainer:
+    """A PPO trainer for the bootstrap agent.
+
+    This class wraps the Stable Baselines 3 PPO implementation and provides a
+    training infrastructure that includes logging, checkpointing, and early
+    stopping.
+
+    Attributes:
+        env_config: The environment configuration.
+        ppo_config: The PPO configuration.
+        env: The Clash Royale environment.
+        vec_env: The vectorized environment.
+        model: The PPO model.
+        training_stats: A dictionary containing training statistics.
     """
-    PPO trainer for the bootstrap agent.
-    
-    This class wraps SB3's PPO implementation and provides training infrastructure
-    including logging, checkpointing, and early stopping.
-    """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  env_config: Optional[EnvironmentConfig] = None,
                  ppo_config: Optional[PPOConfig] = None,
                  tensorboard_log: Optional[str] = None):
-        """
-        Initialize the BootstrapPPOTrainer.
-        
+        """Initializes the BootstrapPPOTrainer.
+
         Args:
-            env_config: Environment configuration
-            ppo_config: PPO configuration
-            tensorboard_log: TensorBoard log directory
+            env_config: The environment configuration.
+            ppo_config: The PPO configuration.
+            tensorboard_log: The TensorBoard log directory.
         """
         self.env_config = env_config or EnvironmentConfig()
         self.ppo_config = ppo_config or PPOConfig()
@@ -583,15 +638,14 @@ class BootstrapPPOTrainer:
         logger.info(f"PPO Config: {asdict(self.ppo_config)}")
     
     def train(self, total_timesteps: int, reset_num_timesteps: bool = True) -> Dict[str, Any]:
-        """
-        Train the PPO model.
-        
+        """Trains the PPO model.
+
         Args:
-            total_timesteps: Number of timesteps to train for
-            reset_num_timesteps: Whether to reset timestep counter
-            
+            total_timesteps: The number of timesteps to train for.
+            reset_num_timesteps: Whether to reset the timestep counter.
+
         Returns:
-            Dictionary with training statistics
+            A dictionary with training statistics.
         """
         logger.info(f"Starting training for {total_timesteps} timesteps")
         self.training_stats['start_time'] = time.time()
@@ -647,12 +701,11 @@ class BootstrapPPOTrainer:
             raise
     
     def save_model(self, path: str, include_metadata: bool = True):
-        """
-        Save the trained model.
-        
+        """Saves the trained model.
+
         Args:
-            path: Path to save the model
-            include_metadata: Whether to include metadata
+            path: The path where to save the model.
+            include_metadata: Whether to include metadata.
         """
         # Create directory if needed
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -679,28 +732,26 @@ class BootstrapPPOTrainer:
             logger.info(f"Model saved to {path}")
     
     def load_model(self, path: str):
-        """
-        Load a trained model.
-        
+        """Loads a trained model.
+
         Args:
-            path: Path to the saved model
+            path: The path to the saved model.
         """
         self.model = PPO.load(path, env=self.vec_env)
         logger.info(f"Model loaded from {path}")
     
     def evaluate(self, n_eval_episodes: int = 10, deterministic: bool = True) -> Dict[str, Any]:
-        """
-        Evaluate the trained model.
-        
+        """Evaluates the trained model.
+
         Args:
-            n_eval_episodes: Number of evaluation episodes
-            deterministic: Whether to use deterministic actions
-            
+            n_eval_episodes: The number of evaluation episodes.
+            deterministic: Whether to use deterministic actions.
+
         Returns:
-            Dictionary with evaluation statistics
+            A dictionary with evaluation statistics.
         """
         from stable_baselines3.common.evaluation import evaluate_policy
-        
+
         episode_rewards, episode_lengths = evaluate_policy(
             self.model, 
             self.vec_env, 
@@ -723,15 +774,19 @@ class BootstrapPPOTrainer:
         return eval_stats
     
     def _get_git_sha(self) -> str:
-        """Get current git SHA."""
+        """Gets the current Git SHA.
+
+        Returns:
+            The Git SHA as a string, or "unknown" if it cannot be determined.
+        """
         try:
-            return subprocess.check_output(['git', 'rev-parse', 'HEAD'], 
+            return subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                         cwd=os.getcwd()).decode('ascii').strip()
         except:
             return "unknown"
     
     def close(self):
-        """Close the trainer and clean up resources."""
+        """Closes the trainer and cleans up resources."""
         if hasattr(self, 'vec_env'):
             self.vec_env.close()
         if hasattr(self, 'env'):
@@ -745,15 +800,14 @@ def create_bootstrap_ppo_trainer(
     ppo_config: Optional[PPOConfig] = None,
     tensorboard_log: Optional[str] = None
 ) -> BootstrapPPOTrainer:
-    """
-    Create a BootstrapPPOTrainer instance.
-    
+    """Creates a BootstrapPPOTrainer instance.
+
     Args:
-        env_config: Environment configuration
-        ppo_config: PPO configuration
-        tensorboard_log: TensorBoard log directory
-        
+        env_config: The environment configuration.
+        ppo_config: The PPO configuration.
+        tensorboard_log: The TensorBoard log directory.
+
     Returns:
-        BootstrapPPOTrainer instance
+        A BootstrapPPOTrainer instance.
     """
     return BootstrapPPOTrainer(env_config, ppo_config, tensorboard_log)

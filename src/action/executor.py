@@ -12,78 +12,81 @@ import time
 
 
 class BaseActionExecutor(ABC):
-    """
-    Base class for action executors in the Clash Royale RL Agent.
-    
+    """Base class for action executors in the Clash Royale RL Agent.
+
     This class defines the interface that all action executors must implement.
-    It provides the basic structure for executing actions in the game environment.
+    It provides the basic structure for executing actions in the game
+    environment.
     """
-    
+
     @abstractmethod
-    def execute(self, action: Dict[str, Any]) -> bool:
-        """
-        Execute an action in the game environment.
-        
+    def execute(self, action: dict[str, Any]) -> bool:
+        """Executes an action in the game environment.
+
         Args:
-            action: Dictionary containing action parameters:
-                - card_slot: Integer (0-3) for card selection from 4 visible cards
-                - grid_x: Integer (0-31) for x position on the grid
-                - grid_y: Integer (0-17) for y position on the grid
-                
+            action: A dictionary containing action parameters, including:
+                - "card_slot": An integer (0-3) for card selection.
+                - "grid_x": An integer (0-31) for the x-coordinate on the grid.
+                - "grid_y": An integer (0-17) for the y-coordinate on the grid.
+
         Returns:
-            bool: True if action was executed successfully, False otherwise
+            True if the action was executed successfully, False otherwise.
         """
         pass
     
     @abstractmethod
     def connect(self) -> bool:
-        """
-        Connect to the game environment.
-        
+        """Connects to the game environment.
+
         Returns:
-            bool: True if connection was successful, False otherwise
+            True if the connection was successful, False otherwise.
         """
         pass
     
     @abstractmethod
     def disconnect(self) -> None:
-        """
-        Disconnect from the game environment.
-        """
+        """Disconnects from the game environment."""
         pass
     
     @abstractmethod
     def is_connected(self) -> bool:
-        """
-        Check if connected to the game environment.
-        
+        """Checks if connected to the game environment.
+
         Returns:
-            bool: True if connected, False otherwise
+            True if connected, False otherwise.
         """
         pass
 
 
 class ActionResult:
+    """Represents the result of an action execution.
+
+    This data class encapsulates the outcome of an action, including its success
+    status, timing information, and any relevant metadata.
+
+    Attributes:
+        success: Whether the action was executed successfully.
+        execution_time_ms: The time taken to execute the action in milliseconds.
+        error_message: An error message if the action failed.
+        metadata: Additional metadata about the action execution.
+        timestamp: The timestamp of when the action result was created.
     """
-    Data class representing the result of an action execution.
-    
-    This class encapsulates the outcome of an action execution, including
-    success status, timing information, and any relevant metadata.
-    """
-    
-    def __init__(self, 
-                 success: bool, 
-                 execution_time_ms: float,
-                 error_message: Optional[str] = None,
-                 metadata: Optional[Dict[str, Any]] = None):
-        """
-        Initialize an ActionResult.
-        
+
+    def __init__(
+        self,
+        success: bool,
+        execution_time_ms: float,
+        error_message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ):
+        """Initializes an ActionResult.
+
         Args:
-            success: Whether the action was executed successfully
-            execution_time_ms: Time taken to execute the action in milliseconds
-            error_message: Error message if the action failed
-            metadata: Additional metadata about the action execution
+            success: Whether the action was executed successfully.
+            execution_time_ms: The time taken to execute the action in
+                milliseconds.
+            error_message: An error message if the action failed.
+            metadata: Additional metadata about the action execution.
         """
         self.success = success
         self.execution_time_ms = execution_time_ms
@@ -92,12 +95,12 @@ class ActionResult:
         self.timestamp = time.time()
     
     def __str__(self) -> str:
-        """String representation of the ActionResult."""
+        """Returns a string representation of the ActionResult."""
         status = "SUCCESS" if self.success else "FAILED"
         return f"ActionResult({status}, {self.execution_time_ms:.2f}ms)"
     
     def __repr__(self) -> str:
-        """Detailed string representation of the ActionResult."""
+        """Returns a detailed string representation of the ActionResult."""
         return (f"ActionResult(success={self.success}, "
                 f"execution_time_ms={self.execution_time_ms:.2f}, "
                 f"error_message={self.error_message}, "

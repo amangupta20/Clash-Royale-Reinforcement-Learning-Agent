@@ -21,12 +21,16 @@ from policy.interfaces import PolicyConfig
 
 
 def create_mock_state():
-    """
-    Create a mock 53-dimensional state vector similar to what BootstrapClashRoyaleEnv would produce.
-    
-    This demonstrates the state vector structure that the policy expects:
-    - Global features (indices 0-12): elixir, time, tower health, phase indicators
-    - Hand features (indices 13-52): 4 cards × 10 features each
+    """Creates a mock 53-dimensional state vector.
+
+    This function creates a state vector similar to what the
+    `BootstrapClashRoyaleEnv` would produce, demonstrating the structure that
+    the policy expects. The vector includes global features like elixir, time,
+    and tower health, as well as features for each of the four cards in the
+    hand.
+
+    Returns:
+        A NumPy array of shape (53,) representing the mock state.
     """
     state = np.zeros(53, dtype=np.float32)
     
@@ -72,7 +76,7 @@ def create_mock_state():
 
 
 def demonstrate_policy_usage():
-    """Demonstrate how to use the structured MLP policy."""
+    """Demonstrates how to use the structured MLP policy."""
     print("="*60)
     print("Structured MLP Policy Integration Example")
     print("="*60)
@@ -181,10 +185,9 @@ def demonstrate_policy_usage():
 
 
 def demonstrate_environment_integration():
-    """
-    Demonstrate how the policy would integrate with BootstrapClashRoyaleEnv.
-    
-    This is a conceptual example since we don't have the full environment running.
+    """Demonstrates how the policy would integrate with `BootstrapClashRoyaleEnv`.
+
+    This is a conceptual example, as it does not run the full environment.
     """
     print("\n" + "="*60)
     print("Environment Integration Concept")
