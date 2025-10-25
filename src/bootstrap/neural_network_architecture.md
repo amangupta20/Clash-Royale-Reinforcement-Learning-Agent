@@ -10,42 +10,42 @@ The agent uses a **Structured MLP Policy** with a shared card encoder to efficie
 
 ```mermaid
 graph TD
-    A[State Vector (53 dims)] --> B{Split State};
-    B --> C[Global State (13 dims)];
-    B --> D[Hand State (40 dims)];
+    A["State Vector (53 dims)"] --> B{"Split State"};
+    B --> C["Global State (13 dims)"];
+    B --> D["Hand State (40 dims)"];
 
-    C --> E[Global Processor];
-    D --> F[Shared Card Encoder];
+    C --> E["Global Processor"];
+    D --> F["Shared Card Encoder"];
 
     subgraph Global Processor
-        E --> G[Linear(13, 64) -> ReLU];
+        E --> G["Linear(13, 64) -> ReLU"];
     end
 
-    subgraph Shared Card Encoder
-        F --> H[4x Linear(10, 32) -> ReLU];
-        H --> I[4x Linear(32, 16)];
+    subgraph "Shared Card Encoder"
+        F --> H["4x Linear(10, 32) -> ReLU"];
+        H --> I["4x Linear(32, 16)"];
     end
 
-    G --> J{Fuse Representations};
+    G --> J{"Fuse Representations"};
     I --> J;
 
-    subgraph Fusion Layer
-        J --> K[Concatenate (64 + 64 = 128 dims)];
-        K --> L[Linear(128, 256) -> ReLU];
-        L --> M[Linear(256, 256) -> ReLU];
+    subgraph "Fusion Layer"
+        J --> K["Concatenate (64 + 64 = 128 dims)"];
+        K --> L["Linear(128, 256) -> ReLU"];
+        L --> M["Linear(256, 256) -> ReLU"];
     end
 
-    M --> N{Action Heads};
+    M --> N{"Action Heads"};
 
-    subgraph Action Heads
-        N --> O[Card Head: Linear(256, 4)];
-        N --> P[X-Coord Head: Linear(256, 32)];
-        N --> Q[Y-Coord Head: Linear(256, 18)];
+    subgraph "Action Heads"
+        N --> O["Card Head: Linear(256, 4)"];
+        N --> P["X-Coord Head: Linear(256, 32)"];
+        N --> Q["Y-Coord Head: Linear(256, 18)"];
     end
 
-    O --> R[Card Logits (4 dims)];
-    P --> S[X-Coord Logits (32 dims)];
-    Q --> T[Y-Coord Logits (18 dims)];
+    O --> R["Card Logits (4 dims)"];
+    P --> S["X-Coord Logits (32 dims)"];
+    Q --> T["Y-Coord Logits (18 dims)"];
 ```
 
 ### Detailed Component Breakdown
